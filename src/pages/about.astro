@@ -1,0 +1,76 @@
+---
+import PageHead from '@/components/PageHead.astro'
+import Layout from '@/layouts/Layout.astro'
+import { SITE } from '@/consts'
+
+// Article Schema for About page
+const articleSchema = {
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "publisher": {
+    "@type": "Organization",
+    "name": SITE.title,
+    "url": SITE.href,
+    "logo": {
+      "@type": "ImageObject",
+      "url": `${SITE.href}/content/images/2024/06/avatar-1.png`,
+      "width": 60,
+      "height": 60
+    }
+  },
+  "author": {
+    "@type": "Person",
+    "name": SITE.title,
+    "image": {
+      "@type": "ImageObject",
+      "url": `${SITE.href}/content/images/2024/06/avatar-2.png`,
+      "width": 700,
+      "height": 700
+    },
+    "url": `${SITE.href}/author/jack/`
+  },
+  "headline": "About this site",
+  "url": `${SITE.href}/about/`,
+  "datePublished": "2024-06-21T10:28:16.000Z",
+  "dateModified": "2024-06-21T10:57:02.000Z",
+  "description": "Jack Klimov is an independent publication launched in June 2024 by Jack Klimov."
+}
+---
+<Layout class="max-w-3xl">
+  <PageHead slot="head" title="About" />
+  
+  <!-- Article Schema for About page SEO -->
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(articleSchema)} />
+
+  <article class="py-8">
+    <h1 class="text-4xl font-bold mb-8">About</h1>
+
+    <div class="prose prose-lg dark:prose-invert max-w-none space-y-6">
+      <p class="text-foreground leading-relaxed">
+        Hi, I'm Jack Klimov. I'm an engineering leader who spends his days building distributed systems, driving AI adoption, and figuring out the human puzzle of running engineering teams. This site is where I write about all of it.
+      </p>
+
+      <h2 class="text-2xl font-semibold mt-10">What you'll find here</h2>
+
+      <p class="text-foreground leading-relaxed">
+        The posts on this site sit at the crossroads of building software and leading the people who build it. On the technical side, I write about distributed systems (replication strategies, the CAP theorem, the things that wake you up at 3 AM), and systems programming in Rust and Python. On the leadership side, I explore the frameworks and hard-won lessons that help engineering teams actually ship.
+      </p>
+
+      <p class="text-foreground leading-relaxed">
+        I don't write to impress. I write to be useful. Every post here started as a real problem I faced, a concept I had to internalize, or a lesson that cost me something to learn. If it saves you time or gives you a new way to think about a hard problem, it did its job.
+      </p>
+
+      <h2 class="text-2xl font-semibold mt-10">Why "jack.direct"</h2>
+
+      <p class="text-foreground leading-relaxed">
+        Because that's how I like my communication: direct. No fluff, no filler, no twelve-paragraph buildup to a one-sentence takeaway. The best technical conversations happen when everyone skips the ceremony and gets to the point. This site tries to honor that.
+      </p>
+
+      <h2 class="text-2xl font-semibold mt-10">Get in touch</h2>
+
+      <p class="text-foreground leading-relaxed">
+        I'm always happy to connect. You can find me on <a href="https://www.linkedin.com/in/jklimov/" class="underline underline-offset-4 hover:text-foreground/80">LinkedIn</a>, browse my open source work on <a href="https://github.com/jaklimoff" class="underline underline-offset-4 hover:text-foreground/80">GitHub</a>, or read some of my earlier writing on <a href="https://medium.com/@jaklimoff" class="underline underline-offset-4 hover:text-foreground/80">Medium</a>. If something I wrote helped you or got something wrong, I genuinely want to hear about it.
+      </p>
+    </div>
+  </article>
+</Layout>

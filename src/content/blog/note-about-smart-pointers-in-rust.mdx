@@ -1,0 +1,153 @@
+---
+title: Note about Smart Pointers In Rust
+description: Overview of smart pointers in Rust, including Box, Rc, Arc, RefCell, Cell, Cow, Mutex, and RwLock with examples and use cases.
+date: 2025-01-27
+image: https://images.unsplash.com/photo-1452174344330-c4343dc1cb8f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3wxMTc3M3wwfDF8c2VhcmNofDYxfHxwb2ludHxlbnwwfHx8fDE3Mzc5ODA1ODF8MA&ixlib=rb-4.0.3&q=80&w=2000
+authors:
+  - jack-klimov
+tags:
+  - rust
+  - programming
+featured: false
+---
+
+## Overview
+
+In Rust, smart pointers are data structures that behave like a pointer, but they also have additional metadata and capabilities. They impose memory safety rules at compile time or runtime, and are responsible for allocation/cleanup via the `Drop` and `Deref` traits.
+
+---
+
+## Common Smart Pointers
+
+### 1. `Box<T>`
+
+* **Purpose**: Allocate values on the heap. Used for:
+  * Storing data of unknown size (e.g., recursive types).
+  * Transferring ownership without copying data.
+  * Creating trait objects (`dyn Trait`).
+
+* **Ownership**: Exclusive (single owner).
+
+**Example**:
+
+```rust
+let boxed = Box::new(42); // Stored on the heap
+```
+
+### 2. `Rc<T>` (Reference Counting)
+
+* **Purpose**: Enable multiple owners for the same data (non-thread-safe).
+  * Use when sharing data across multiple parts of a program in single-threaded contexts.
+  * Clones increment a reference counter.
+
+* **Ownership**: Shared (immutable borrows only).
+
+**Example**:
+
+```rust
+use std::rc::Rc;
+let rc1 = Rc::new(42);
+let rc2 = rc1.clone(); // Both point to the same data
+```
+
+### 3. `Arc<T>` (Atomic Reference Counting)
+
+* **Purpose**: Thread-safe version of `Rc<T>`.
+  * Uses atomic operations for reference counting (slower than `Rc`).
+  * Use for shared ownership across threads.
+
+* **Ownership**: Shared (immutable borrows only).
+
+**Example**:
+
+```rust
+use std::sync::Arc;
+let arc = Arc::new(42);
+let arc_clone = arc.clone(); // Safe to share across threads
+```
+
+### 4. `RefCell<T>`
+
+* **Purpose**: Enables interior mutability: mutate data behind an immutable reference.
+  * Borrowing rules checked **at runtime** (not compile time).
+  * Panics at runtime if rules are violated.
+
+* **Ownership**: Single owner, but allows mutable/immutable borrows at runtime.
+
+**Example**:
+
+```rust
+use std::cell::RefCell;
+let cell = RefCell::new(42);
+let mut borrow = cell.borrow_mut();
+*borrow += 1;
+```
+
+### 5. `Cell<T>`
+
+* **Purpose**: Interior mutability for copyable types.
+  * No runtime checks (avoids borrow checker by moving/copying values).
+  * Works with `Copy` types (e.g., primitives).
+
+**Example**:
+
+```rust
+use std::cell::Cell;
+let cell = Cell::new(42);
+cell.set(24); // No need for borrow checks
+```
+
+### 6. `Cow<T>` (Clone-on-Write)
+
+* **Purpose**: Optimize memory by deferring cloning until mutation occurs.
+  * `Cow::Borrowed` holds a reference to data.
+  * `Cow::Owned` holds owned data (allocated on mutation).
+
+* **Use Case**: Avoid unnecessary copies for read-heavy data.
+
+**Example**:
+
+```rust
+use std::borrow::Cow;
+let cow = Cow::Borrowed("hello");
+let owned: Cow<_> = cow.to_mut(); // Clones only if mutated
+```
+
+### 7. `Mutex<T>` and `RwLock<T>`
+
+* **Purpose**: Thread-safe interior mutability.
+  * `Mutex`: Exclusive locking (one writer at a time).
+  * `RwLock`: Only allows multiple readers or one writer.
+  * Used with `Arc` for shared ownership across threads.
+
+**Example**:
+
+```rust
+use std::sync::{Arc, Mutex};
+let data = Arc::new(Mutex::new(42));
+let mut guard = data.lock().unwrap();
+*guard += 1;
+```
+
+---
+
+## Summary Table
+
+| Pointer | Purpose | Ownership | Thread-Safe? | Mutability |
+|---------|---------|-----------|--------------|------------|
+| `Box<T>` | Heap allocation | Single | No | Immutable/Mutable |
+| `Rc<T>` | Shared ownership (single thread) | Multiple | No | Immutable |
+| `Arc<T>` | Shared ownership (thread-safe) | Multiple | Yes | Immutable |
+| `RefCell<T>` | Runtime-checked mutability | Single | No | Mutable |
+| `Cell<T>` | Copy-based mutability | Single | No | Mutable |
+| `Cow<T>` | Clone-on-write optimization | Borrowed/Owned | No | Conditional |
+| `Mutex<T>` | Thread-safe exclusive access | Single | Yes | Mutable |
+| `RwLock<T>` | Thread-safe read/write access | Single | Yes | Mutable |
+
+## Key Takeaways
+
+* Use `Box` for heap allocation or trait objects.
+* Prefer `Rc`/`Arc` for shared ownership (non-threaded vs. threaded).
+* `RefCell`/`Cell` enable controlled mutability where the borrow checker is too restrictive.
+* `Cow` optimizes for read-heavy, rarely mutated data.
+* `Mutex`/`RwLock` handle concurrent access in multithreaded code.

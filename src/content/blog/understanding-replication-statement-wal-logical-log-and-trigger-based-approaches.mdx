@@ -1,0 +1,158 @@
+---
+title: Understanding Replication - Statement, WAL, Logical Log, and Trigger-Based Approaches
+description: Replication is a fundamental technique in distributed systems for ensuring reliability, availability, and fault tolerance. Learn about Statement-Based, WAL, Logical Log, and Trigger-Based replication.
+date: 2025-01-19
+image: /content/images/2025/01/types_of_data_replication_cover_photo_0c353c075a.png
+authors:
+  - jack-klimov
+tags:
+  - databases
+  - distributed-systems
+  - replication
+featured: false
+---
+
+Replication is a fundamental technique in distributed systems for ensuring reliability, availability, and fault tolerance. And it's the foundation of any solid application, preventing your data from disappearing into the void during a failure. Replication is not a one dimensional concept - replication has many forms, each with its advantages, limitations, and applications.
+
+In this article, we'll explore four common forms of replication:
+
+* **Statement-Based**
+* **Write-Ahead Log (WAL)**
+* **Logical Log**
+* **Trigger-Based Replication**.
+
+## 1. Statement-Based Replication
+
+This one's rather simple: the database logs **SQL statements** that get run on the primary and replays them on the replicas.
+
+### How It Works:
+
+* When you run a query like `UPDATE accounts SET balance = balance - 100 WHERE id = 123`, the primary logs that exact SQL statement.
+* The replicas only run the same SQL to catch up.
+
+So you basically mindlessly duplicate SQL commands and not their results, which means that if you want to set some field to random with simple sql statement
+
+```sql
+UPDATE countries
+SET tax = FLOOR(1 + RAND() * 100)
+WHERE id = 5;
+```
+
+Then different replicas will get this statement and execute it within their own context and get different value for `tax` field.
+
+### Pros:
+
+* **Super lightweight**: Only logs the SQL statements, so it doesn't take up much space.
+* **Easy to grasp**: No rocket science here - can be understood by a child.
+
+### Cons:
+
+* **Non-deterministic Issues**: Non-deterministic Statement: `RAND()` or NOW() statements are considered non-deterministic statements, as they may provide different answers if they are called multiple times.
+* **Side Effects**: Triggers or external dependencies can lead to unexpected results
+
+### Real-World Use:
+
+It's great for simple, predictable use cases where queries results are determined. If you're building a blog or a small app, this might just do the trick.
+
+---
+
+## 2. Write-Ahead Log (WAL) Replication
+
+Databases like PostgreSQL user special transaction logs, to record planned changes before they are executed (That's why they are actually called write-AHEAD-logs). This process ensures data integrity and helps to recover from crashes, maintaining the reliability and consistency of the database system. And since they write those logs anyway, why not utilize them for replication?
+
+This time it is not the statement that we save, but the result of it in a very low-level, detailed way. So low, in fact, that only similar compatible versions of replicas will be able to interpret the original intent.
+
+### How It Works:
+
+* The user runs a query like `UPDATE accounts SET balance = balance - 100 WHERE id = 123`.
+* The database calculates which bytes need to be changed and appends these changes to a **write-ahead log (WAL)**.
+* The replicas read this log and apply the changes byte-for-byte.
+
+### Pros:
+
+* **Precise Replication**: It's foolproof - no data gets lost or altered.
+* **Crash Recovery**: If your primary DB goes kaput, you can use these logs to recover.
+
+### Cons:
+
+* **Disk-Intensive**: Writing changes twice (to WAL and the main database) can slow down performance.
+* **Harder Interpreting**: Low-level logs are not human-readable and even computer will have problems with it if versions of master and replica are too different.
+
+### Real-World Use:
+
+PostgreSQL relies on this for replication and recovery. It's perfect for setups where precision matters, like finance or transaction-heavy systems.
+
+---
+
+## 3. Logical Log Replication
+
+If **WAL** is too low-level for you, logical log replication steps it up. It logs **high-level changes** like `INSERT`, `UPDATE`, or `DELETE` in a structured format. Think of it as explaining WHAT changed, not how it changed.
+
+### How It Works:
+
+* The user runs a query like `UPDATE accounts SET balance = balance - 100 WHERE id = 123`.
+* This time when data is modified, the logical log records operations **independently** of the physical storage format.
+* The replicas replay these operations to stay in sync.
+
+### Pros:
+
+* **Readable Logs**: Finally, logs that humans can understand! Debugging gets easier.
+* **Cross-Database Compatibility**: You can replicate to different database systems, like MySQL to PostgreSQL. (with extra tools)
+* **Selective Replication**: Only selected tables, columns, or rows can now be replicated, which is was way harder with WAL.
+
+### Cons:
+
+* **Overhead**: Converting changes into a structured format takes time and CPU power
+* **Slower than WAL**: Logical logs are less efficient in terms of raw speed because.... it has more logic :) .
+
+### Real-World Use:
+
+Logical logs are your go-to for data migrations or analytics pipelines. They're great when you need flexibility and plan to have ETL data pipes.
+
+---
+
+## 4. Trigger-Based Replication
+
+This method is more hands-on. You set up **triggers** in the database to capture changes and replicate them. It's like creating custom rules for what gets copied and when.
+
+### How It Works:
+
+* The user runs a query like `UPDATE accounts SET balance = balance - 100 WHERE id = 123`.
+* Specific triggers activate for designated events (like `INSERT`, `UPDATE`, or `DELETE`).
+* These triggers log changes or push them to replicas.
+
+### Pros:
+
+* **Highly Customizable**: You totally control what, when and where gets replicated.
+* **Works for Legacy Systems**: Can be added without altering the database architecture. And works well with older databases where other replication options might not exist.
+
+### Cons:
+
+* **Performance Hit**: Triggers introduce additional overhead and can slow down the whole system
+* **Complexity**: Debugging poorly designed triggers is no fun.
+* **Potential Errors**: Poorly designed triggers can lead to inconsistencies.
+
+### Real-World Use:
+
+Perfect for cases where you need fine-grained control, like syncing subsets of data to a reporting database and so on.
+
+---
+
+## Comparing the Methods
+
+| Method | Precision | Performance | Complexity | Use Case |
+|--------|-----------|-------------|------------|----------|
+| Statement-Based | Low | High | Low | Simple apps, blogs |
+| WAL | High | Medium | Medium | Finance, transactional |
+| Logical Log | Medium | Medium | Medium | ETL, migrations |
+| Trigger-Based | Variable | Low | High | Legacy systems, custom needs |
+
+---
+
+## Closing Thoughts
+
+So, which replication method should you use? It really depends on your use case. If you're all about precision, go for WAL. Need flexibility? Logical logs will do. Working with legacy systems? Trigger-based is the best fit.
+
+Replication isn't magic, but it's one of those tools that can save your system (nervous) when things go south.
+
+Got questions or stories about your replication nightmare/adventure? Share with me in comments or DM!

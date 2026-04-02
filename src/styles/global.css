@@ -1,0 +1,191 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+
+@theme inline {
+  --font-sans: Geist, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-mono: Geist Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-additive: var(--additive);
+  --color-additive-foreground: var(--additive-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+}
+
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/GeistVF.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: optional;
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  src: url('/fonts/GeistMonoVF.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: optional;
+}
+
+:root {
+  --background: hsl(0 0% 100%);
+  --header-background: hsl(0 0% 98%);
+  --foreground: hsl(0 0% 9%);
+  --primary: hsl(328 100% 77%);
+  --primary-foreground: hsl(0 0% 9%);
+  --secondary: hsl(0 0% 96%);
+  --secondary-foreground: hsl(0 0% 9%);
+  --muted: hsl(0 0% 96%);
+  --muted-foreground: hsl(0 0% 45%);
+  --accent: hsl(328 100% 97%);
+  --accent-foreground: hsl(328 100% 30%);
+  --additive: hsl(112 50% 36%);
+  --additive-foreground: hsl(0 0% 9%);
+  --destructive: hsl(0 84.2% 60.2%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(0 0% 90%);
+  --ring: hsl(328 100% 77%);
+}
+
+[data-theme='dark'] {
+  --background: hsl(240 21% 14.9%);
+  --header-background: hsl(240 21% 11%);
+  --foreground: hsl(0 0% 95%);
+  --primary: hsl(328 100% 77%);
+  --primary-foreground: hsl(0 0% 9%);
+  --secondary: hsl(220 12% 22%);
+  --secondary-foreground: hsl(0 0% 98%);
+  --muted: hsl(220 12% 22%);
+  --muted-foreground: hsl(0 0% 70%);
+  --accent: hsl(328 100% 20%);
+  --accent-foreground: hsl(328 100% 85%);
+  --additive: hsl(112 50% 36%);
+  --additive-foreground: hsl(0 0% 9%);
+  --destructive: hsl(0 62.8% 30.6%);
+  --destructive-foreground: hsl(0 0% 98%);
+  --border: hsl(220 12% 26%);
+  --ring: hsl(328 100% 77%);
+}
+
+@layer base {
+  *, ::after, ::before, ::backdrop, ::file-selector-button {
+    @apply border-border outline-ring/50 tracking-tight;
+  }
+
+  html {
+    @apply bg-background text-foreground scheme-light;
+  }
+
+  html[data-theme='dark'] {
+    @apply scheme-dark;
+  }
+
+  /* Prevent layout shifts during view transitions */
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.2s;
+  }
+
+  /* Ensure stable font rendering to prevent layout shifts */
+  h1, h2, h3, h4, h5, h6 {
+    font-variant-ligatures: none;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::-webkit-scrollbar-corner {
+    @apply bg-transparent;
+  }
+
+  .disable-transitions * {
+    @apply transition-none!;
+  }
+
+  /* Enhanced focus indicators for accessibility */
+  /* Only apply to links that don't have custom focus styles */
+  a:focus-visible:not([class*='focus-visible']):not([class*='ring']) {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+  
+  /* Remove default browser outline - components handle their own focus styles */
+  button:focus,
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: none;
+  }
+  
+  /* Remove all default input styling that might cause visible rectangles */
+  input[type="text"],
+  input[type="search"] {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+  
+  input[type="text"]:not(:focus-visible),
+  input[type="search"]:not(:focus-visible) {
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+  }
+
+  /* Screen reader only class */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .focus\:not-sr-only:focus {
+    position: static;
+    width: auto;
+    height: auto;
+    padding: inherit;
+    margin: inherit;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+  }
+
+}
+
+/* Tech badge - minimal styles to avoid conflicts with Framer Motion */
+.tech-badge {
+  /* Remove conflicting animations - let Framer Motion handle transforms */
+  will-change: auto;
+}
+
+.tech-badge-visible {
+  /* Just ensure visibility, no transform conflicts */
+  opacity: 1;
+}
+
+
+/* Safe area support for mobile devices (notch, home indicator) */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0.75rem);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top, 0.75rem);
+}
+

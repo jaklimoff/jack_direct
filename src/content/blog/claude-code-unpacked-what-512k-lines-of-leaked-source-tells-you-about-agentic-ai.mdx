@@ -1,0 +1,101 @@
+---
+title: "Claude Code Unpacked: What 512k Lines of Leaked Source Tells You About Agentic AI"
+description: "Discover what ccunpacked.dev reveals about Claude Code's agent loop, hidden features, and Anthropic's unreleased roadmap - straight from 512k lines of leaked source."
+date: 2026-04-02
+image: /content/images/2026/04/claude-code-unpacked-what-512k-lines-of-leaked-source-tells-you-about-agentic-ai.png
+authors:
+  - jack-klimov
+tags:
+  - ai
+  - agents
+  - claude
+---
+
+A misconfigured `.npmignore`, a 59.8 MB source map, and 512,000 lines of readable TypeScript - here's what Claude Code's leaked source reveals about how production agentic AI actually gets built.
+
+The npm registry doesn't lie. On March 31, 2026, Anthropic shipped `@anthropic-ai/claude-code` version 2.1.88 with a misconfigured `.npmignore` - and a 59.8 MB source map file hitched a ride. That file mapped minified production JavaScript back to 512,000 lines of readable TypeScript source. Within hours, the community had it mirrored, archived, and fully indexed.[^2]
+
+[**ccunpacked.dev**](https://ccunpacked.dev) is the cleanest dissection of that leak. It's an unofficial, community-built site that takes the raw source and turns it into a navigable reference: the agent loop visualized step-by-step, the full tool catalog, every slash command, and a dedicated section on features that are compiled into the binary but gated behind flags set to `false` in the public build.[^4]
+
+This is not a security disclosure. This is a systems architecture post-mortem - and it's one of the most instructive reads on production agentic AI design you'll find anywhere.
+
+## How Does Claude Code's Agent Loop Actually Work?
+
+Think of the master loop like a Walmart self-checkout lane: one item goes in, gets processed, the result either resolves or gets re-queued, and nothing moves forward until that item is done. Simple. Deliberately so.
+
+At the core sits a single-threaded master loop, internally codenamed `nO`. The pattern is almost embarrassingly minimal: `while(tool_call) → execute tool → feed results → repeat`. When Claude produces a plain-text response with no tool invocations, the loop terminates and waits. No parallel threads competing for state, no agent swarms thrashing shared memory. [^1]
+
+The agent loop itself breaks into roughly 11 discrete stages - from input handling and context injection through to streaming output and state reconciliation. Alongside `nO` runs an async message queue (`h2A`) that handles real-time steering: you can interrupt, redirect, or cancel mid-execution without blowing up the loop's state machine. That's the design bet Anthropic made - debuggability and predictability over raw parallelism. [^1]
+
+Sub-agents exist, but they're leashed. Claude can spawn one sub-agent at a time via the `dispatch_agent` (internally `I2A`/Task Agent) tool. Those sub-agents **cannot spawn their own sub-agents** - depth is hard-limited to one level. You get parallelism for codebase-wide searches or multi-approach explorations, but you don't get recursive agent explosions that are impossible to trace in production.[^1]
+
+## What's in the Tool System? (More Than You Think)
+
+The public docs mention a handful of tools. The source tells a different story. The tool catalog inside `ccunpacked.dev` maps over 40 built-in tools across seven categories:
+
+| Category | Examples |
+|---|---|
+| File Operations | `read_file`, `write_file`, `edit_file`, `multi_edit` |
+| Execution | `bash`, `computer` |
+| Search & Fetch | `grep`, `glob`, `web_fetch` |
+| Agents & Tasks | `dispatch_agent`, `task` |
+| Planning | `todo_read`, `todo_write` |
+| System Management | `mcp` (Model Context Protocol) |
+| Experimental | `web_browser` (gated) |
+
+The TODO-based planning tools are particularly interesting. Claude maintains a persistent, in-loop task list - not a scratchpad, but a formal planning artifact that feeds back into its own context. It's structured autonomy: the model reasons about its own plan as data.[^4]
+
+Each tool invocation also passes through a four-layer decision pipeline before execution. Layers 1–3 are deterministic rule checks. Only when all three are inconclusive does a separate AI classifier fire - always Sonnet, always `temperature=0`, explicitly scoped as a "safety monitor for autonomous AI programming agents." The classifier runs against three risk categories: prompt injection, scope creep, and unintended harm. Your `CLAUDE.md` config gets injected into the classifier's context, which means your project-level instructions directly influence what the agent is allowed to do autonomously.[^5]
+
+## What Are Claude Code's Hidden Features?
+
+This is the section that broke the internet. The leak documents **44 feature flags** gating functionality that is fully compiled but not shipped. These aren't stubs or TODO comments - they're real implementation code behind a boolean.[^2]
+
+### KAIROS - Always-On Background Agent
+
+KAIROS is a persistent memory and ambient awareness system. It logs user activity across sessions and acts proactively - without waiting for a prompt. Think of it as Claude running in daemon mode, watching your repo for changes and building context continuously. The public build has no session persistence whatsoever; KAIROS is the architectural answer to that gap.[^3]
+
+### UltraPlan - 30-Minute Deep Planning
+
+UltraPlan offloads the planning phase of a task to Claude Opus running in a remote cloud container - for up to 30 minutes. You get a browser interface to monitor and approve the plan before execution starts. For migrations, large refactors, or any task where the cost of a wrong plan is measured in hours, this is a qualitatively different capability.[^3]
+
+### Coordinator Mode - Multi-Agent Orchestration
+
+One Claude instance acts as an orchestrator managing multiple parallel worker agents through a mailbox system. Each worker gets a restricted toolset and handles a subtask. The coordinator routes work and reconciles results. This is Governed Autonomy in practice - parallelism with explicit coordination topology, not a free-for-all swarm.[^3]
+
+### BUDDY - The AI Pet
+
+Yes, really. BUDDY is a virtual pet system with species, traits, and deterministic generation based on your user ID. It was originally planned as an April 1 teaser. It's absurd, it's charming, and it's evidence that Anthropic's engineers have a sense of humor buried under 512k lines of TypeScript.[^3]
+
+### The Rest of the Roadmap
+
+The flag list reads like a product roadmap that forgot to ship:
+
+* `VOICE_MODE` - full voice interaction with its own CLI entrypoint
+* `WEB_BROWSER_TOOL` - real browser control via Playwright, not just `web_fetch`
+* `DAEMON` - background process mode for persistent operation
+* `AGENT_TRIGGERS` - event-based agent activation (webhooks, cron jobs)
+* `DREAM` - self-maintaining memory without external storage
+* `UNDERCOVER_MODE` - prevents Claude from surfacing AI attribution in commits, used internally by Anthropic employees[^3]
+
+## What Does This Architecture Tell You About Building Agentic Systems?
+
+Anthropic made a specific, opinionated bet: **a single-threaded master loop with one level of sub-agent depth, deterministic tool guards, and explicit planning artifacts beats a multi-agent swarm in production.** The debuggability argument is real. When something goes wrong in an unconstrained multi-agent system, your observability stack is doing archaeology. With a flat message history and a single main thread, you can replay every decision.
+
+The four-layer tool permission system is the same principle. Three cheap deterministic checks gate the expensive AI classifier. Your mean time to recovery (MTTR) on a misbehaving agent drops dramatically when the failure modes are enumerated upfront rather than emergent.
+
+The hidden features - KAIROS, Coordinator Mode, AGENT_TRIGGERS - show where the architecture is clearly heading: Sovereign AI workflows that run continuously, not on-demand. Background agents with webhooks and cron schedules. Orchestrators managing worker fleets. This is not speculative. The code is compiled, sitting behind a flag.[^2]
+
+## The Real Lesson From the Leak
+
+The architectural decision worth stealing isn't any single feature. It's the discipline of **controllable autonomy over maximal autonomy**. The `nO` loop, the one-level sub-agent cap, the classifier-as-last-resort - these are deliberate constraints, not limitations. Anthropic built a system where every decision has a traceable path. In an era where "agentic AI" gets conflated with "agent that does whatever it wants," that constraint is the competitive differentiator.
+
+`ccunpacked.dev` is worth an afternoon of your time. Not because the leak is salacious - it isn't - but because it's a rare, unfiltered look at how a production agentic system actually gets built, warts, virtual pets, and all.[^4]
+
+## References
+
+[^1]: https://blog.promptlayer.com/claude-code-behind-the-scenes-of-the-master-agent-loop/
+[^2]: https://www.the-ai-corner.com/p/claude-code-source-code-leaked-2026
+[^3]: https://wavespeed.ai/blog/posts/claude-code-leaked-source-hidden-features/
+[^4]: https://ccunpacked.dev
+[^5]: https://www.gate.com/news/detail/ant-engineer-reverse-engineers-claude-code-source-revealing-the-four-layer-19761177

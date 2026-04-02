@@ -1,0 +1,34 @@
+---
+title: Rollback PyCharm (or any JetBrains IDE) settings
+description: I frequently use PyCharm, and today my settings were overwritten with outdated data from another computer via cloud sync. Here's how to rollback your IDE settings to a specific day and time.
+date: 2024-12-11
+authors:
+  - jack-klimov
+tags:
+  - pycharm
+  - jetbrains
+  - productivity
+featured: false
+---
+
+I frequently use PyCharm, and today my settings were overwritten with outdated data from another computer via cloud sync. 🙀 My theme and shortcuts were messed up and broken. Honestly, I had been concerned about this happening since I enabled cloud sync between all JetBrain IDEs. I couldn't find much information on how to resolve this issue, so I decided to write a short note on how to rollback your IDE settings to a specific day and time if you encounter the same problem.
+
+**Where is the settings history stored?**
+
+Good news are that ALL changes to your settings within any JetBrains IDE are stored under Git in the `settingsSync` folder.
+
+For macOS: `~/Library/Application Support/JetBrains/<product><version>/settingsSync`
+For Linux: `~/.config/JetBrains/<product><version>/settingsSync`
+For Windows: `%APPDATA%\JetBrains\<product><version>\settingsSync`
+
+For example, in my case, `settingsSync` folder for PyCharm was located at `~/Library/Application Support/JetBrains/**PyCharm2024.3**/settingsSync`
+
+If you want to see what has been synced and who to blame, you can use the `git log` and `git diff` commands in this folder.
+
+**There is also a tool panel in the IDE**
+
+The IDE has a special UI to manage sync history. You can find it under `View -> Tool Windows -> Backup and Sync History`
+
+Or simply open it via "Search Action" to get there quickly.
+
+Here, you can view the entire history and roll back to a specific change immediately.

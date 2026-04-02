@@ -1,0 +1,80 @@
+---
+title: "Mastering Solidity Pragma: 6 Ways to Specify Compiler Versions"
+description: The pragma statement is an essential part of your Solidity code that tells the compiler which version to use. Learn 6 different ways to specify compiler versions.
+date: 2024-06-11
+image: /content/images/2024/06/1-mdxy8ikiqfjx1thoc5zdbq.png
+authors:
+  - jack-klimov
+tags:
+  - solidity
+  - ethereum
+---
+
+## Introduction
+
+The pragma statement, while it might seem like a routine line at the top of your Solidity files, is an essential part of your Solidity code that tells the compiler which version to use. Solidity adopts npm's versioning syntax, enabling multiple approaches to defining version constraints.
+
+## Semantic Versioning (SemVer)
+
+Solidity follows semantic versioning with the format `MAJOR.MINOR.PATCH`:
+
+- **MAJOR**: incompatible API changes
+- **MINOR**: backward-compatible functionality additions
+- **PATCH**: backward-compatible bug fixes
+
+## 6 Ways to Specify Compiler Versions
+
+### 1. Exact Version
+
+Pin your contract to a specific compiler version:
+
+```solidity
+pragma solidity 0.8.25;
+pragma solidity 0.8;
+```
+
+### 2. Less Than / Greater Than Ranges
+
+Use comparison operators to define acceptable version ranges:
+
+```solidity
+pragma solidity >=0.7.0;
+pragma solidity >=0.7.1 <0.7.5;
+```
+
+### 3. Hyphen Ranges
+
+Define an inclusive range using a hyphen:
+
+```solidity
+pragma solidity 0.8.0 - 0.8.20;
+```
+
+### 4. X-Ranges
+
+Use `x`, `X`, or `*` as wildcards for version components:
+
+```solidity
+pragma solidity 0.8.x; // >=0.8.0 <0.9.0
+pragma solidity 0.*;    // >=0.0.0 <1.0.0
+```
+
+### 5. Tilde Ranges
+
+The tilde allows patch-level changes within the specified minor version:
+
+```solidity
+pragma solidity ~0.7.3; // >=0.7.3 <0.8.0
+```
+
+### 6. Caret Ranges
+
+The caret allows changes that do not modify the left-most non-zero digit:
+
+```solidity
+pragma solidity ^0.2.3; // >=0.2.3 <0.3.0
+```
+
+## Conclusion
+
+Understanding version ranges is crucial for smart contract development. It helps you balance compatibility assurance with flexibility for future updates. Choose the method that best suits your project's needs and security requirements.

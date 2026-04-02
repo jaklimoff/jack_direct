@@ -1,0 +1,54 @@
+---
+import Link from '@/components/Link.astro'
+import ThemeToggle from '@/components/ThemeToggle.astro'
+import MobileMenu from '@/components/ui/mobile-menu'
+import SearchButton from '@/components/react/SearchButton'
+import { NAV_LINKS } from '@/consts'
+import { Icon } from 'astro-icon/components'
+
+const isExternalLink = (href: string) => {
+  return href.startsWith('http')
+}
+---
+
+<header class="bg-background/50 sticky top-0 z-10 backdrop-blur-md" transition:persist>
+  <div class="mx-auto grid max-w-3xl grid-cols-3 items-center gap-4 p-4">
+    <!-- Left: Navigation -->
+    <nav class="hidden items-center gap-6 text-sm md:flex">
+      {NAV_LINKS.map((item) => {
+        const isExternal = isExternalLink(item.href)
+        return (
+          <Link
+            href={item.href}
+            class="text-foreground/80 hover:text-foreground font-medium capitalize transition-colors flex items-center gap-1.5"
+          >
+            <span>{item.label}</span>
+            {isExternal && (
+              <Icon
+                name="lucide:external-link"
+                class="size-3.5 opacity-70 flex-shrink-0"
+                aria-hidden="true"
+              />
+            )}
+          </Link>
+        )
+      })}
+    </nav>
+    <div class="md:hidden">
+      <MobileMenu client:idle transition:persist />
+    </div>
+
+    <!-- Center: Site Title -->
+    <div class="flex justify-center">
+      <Link href="/" class="text-foreground hover:text-foreground/80 transition-colors text-lg font-bold tracking-tight">
+        Jack Klimov
+      </Link>
+    </div>
+
+    <!-- Right: Actions -->
+    <div class="flex items-center justify-end gap-2 md:gap-3">
+      <SearchButton client:idle />
+      <ThemeToggle transition:persist />
+    </div>
+  </div>
+</header>

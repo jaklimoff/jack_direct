@@ -1,0 +1,172 @@
+---
+import BlogCard from '@/components/BlogCard.astro'
+import Link from '@/components/Link.astro'
+import PageHead from '@/components/PageHead.astro'
+import Layout from '@/layouts/Layout.astro'
+import { Icon } from 'astro-icon/components'
+import { getAllPosts, groupPostsByYear, getCombinedReadingTime } from '@/lib/data-utils'
+import { SOCIAL_LINKS, ICON_MAP, SITE } from '@/consts'
+import type { SocialLink } from '@/types'
+
+// Get all posts
+const allPosts = await getAllPosts()
+
+// Get featured posts (posts with featured: true in frontmatter)
+const featuredPosts = allPosts.filter(post => post.data.featured).slice(0, 4)
+
+// Get recent posts for the main list, grouped by year
+const recentPosts = allPosts.slice(0, 10)
+const postsByYear = groupPostsByYear(recentPosts)
+const years = Object.keys(postsByYear).sort((a, b) => parseInt(b) - parseInt(a))
+
+// Person Schema for homepage SEO
+const personSchema = {
+  "@context": "https://schema.org",
+  "@type": "Person",
+  "name": SITE.title,
+  "url": SITE.href,
+  "description": SITE.description
+}
+
+// Website Schema
+const websiteSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": SITE.title,
+  "url": SITE.href,
+  "description": SITE.description,
+  "publisher": {
+    "@type": "Organization",
+    "name": SITE.title,
+    "url": SITE.href,
+    "logo": {
+      "@type": "ImageObject",
+      "url": `${SITE.href}/content/images/2024/06/avatar-1.png`,
+      "width": 60,
+      "height": 60
+    }
+  }
+}
+
+---
+<Layout class="max-w-4xl" transition:persist="home-layout">
+  <PageHead slot="head" title={SITE.title} fullTitle={true} />
+  
+  <!-- Schema Markup for SEO -->
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(personSchema)} />
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(websiteSchema)} />
+  
+  <!-- Hero Section -->
+  <section class="py-12 sm:py-16">
+    <div class="flex flex-col items-center text-center gap-6">
+      <!-- Avatar -->
+      <img
+        src="/content/images/2024/06/avatar-1.png"
+        alt="Jack Klimov"
+        class="w-24 h-24 rounded-full"
+      />
+      <div>
+        <h1 class="text-xl sm:text-2xl font-bold mb-2">{SITE.title}</h1>
+        <p class="text-sm sm:text-base text-muted-foreground max-w-lg">
+          {SITE.description}
+        </p>
+      </div>
+      <!-- Social Links -->
+      <ul class="flex flex-wrap items-center justify-center gap-2" role="list">
+        {SOCIAL_LINKS.map(({ href, label }: SocialLink) => (
+          <li>
+            <Link
+              href={href}
+              aria-label={label}
+              title={label}
+              class="inline-flex items-center gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors border border-border/50 rounded-full px-3 py-1"
+              external={href.startsWith('http') || href.startsWith('mailto:')}
+            >
+              <Icon
+                name={
+                  ICON_MAP[label as keyof typeof ICON_MAP] ||
+                  'lucide:message-circle-question'
+                }
+                class="size-3.5"
+              />
+              {label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <!-- Featured Articles Section (full width) -->
+  {featuredPosts && featuredPosts.length > 0 && (
+    <section class="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen px-4 sm:px-6 lg:px-8 mb-12">
+      <div class="max-w-6xl mx-auto">
+        <h2 class="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Featured articles</h2>
+        <hr class="border-border mb-6" />
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {featuredPosts.map(async (post) => {
+            const imageData = post.data.image
+            const imageSrc = imageData?.startsWith('http')
+              ? imageData
+              : imageData || '/og-default.png'
+            const readTime = await getCombinedReadingTime(post.id)
+            const primaryTag = post.data.tags?.[0]
+            return (
+              <article class="group">
+                <Link
+                  href={`/blog/${post.id}`}
+                  class="block"
+                >
+                  <div class="aspect-[16/10] overflow-hidden rounded-lg mb-3 bg-muted">
+                    <img
+                      src={imageSrc}
+                      alt={post.data.title}
+                      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      loading="lazy"
+                    />
+                  </div>
+                  <h3 class="font-semibold text-sm leading-snug group-hover:text-primary transition-colors line-clamp-3">
+                    {post.data.title}
+                  </h3>
+                  <p class="text-xs text-muted-foreground/60 mt-1">
+                    {readTime}{primaryTag && ` · ${primaryTag}`}
+                  </p>
+                </Link>
+              </article>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )}
+
+  <!-- Recent Posts Section -->
+  <section>
+    {years.map((year) => (
+      <div class="flex flex-col">
+        <div class="text-muted-foreground text-xs font-semibold uppercase tracking-wider mb-2 mt-14 first:mt-4 pb-2 border-b border-border/50">
+          {year}
+        </div>
+        <ul class="flex flex-col">
+          {postsByYear[year].map((post) => (
+            <li>
+              <BlogCard entry={post} />
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+  </section>
+
+  <!-- Read More -->
+  <div class="pt-10 pb-4 flex justify-center">
+    <a
+      href="/blog"
+      class="inline-flex items-center gap-2 rounded-full border border-border px-6 py-3 text-sm font-medium text-foreground/80 hover:text-foreground hover:border-foreground/40 transition-colors"
+    >
+      Read More
+      <Icon name="lucide:arrow-right" class="size-4" />
+    </a>
+  </div>
+
+</Layout>

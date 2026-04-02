@@ -1,0 +1,96 @@
+---
+title: '"Pull over Push" pattern in solidity'
+description: The "Pull over Push" pattern is a method that shifts the responsibility of withdrawing funds from the contract to the user, ensuring smoother and safer transactions.
+date: 2024-05-31
+image: /content/images/2024/06/1-xncw80maphlfbarazcjo6g.png
+authors:
+  - jack-klimov
+tags:
+  - solidity
+  - ethereum
+  - patterns
+featured: true
+---
+
+## Introduction
+
+In the world of Ethereum smart contracts, transferring ETH can be tricky. The "Pull over Push" pattern is a method that shifts the responsibility of withdrawing funds from the contract to the user, ensuring smoother and safer transactions. This approach is crucial for avoiding common pitfalls when dealing with multiple recipients or complex contract logic.
+
+## Why the Push Pattern Fails
+
+The traditional approach to sending funds — automatically pushing ether to users — seems straightforward but can lead to several issues.
+
+Here's a simplified example of push pattern, where we send transfer ETH directly to all receivers when `push` function is called.
+
+```solidity
+// Push pattern - NOT RECOMMENDED
+function distributeFunds(address[] memory recipients, uint256[] memory amounts) external {
+    for (uint256 i = 0; i < recipients.length; i++) {
+        payable(recipients[i]).transfer(amounts[i]);
+    }
+}
+```
+
+### Issues with the Push Pattern:
+
+1. **Gas Limit Problems**: Iterating over a large array of addresses can exceed the block gas limit, making the function fail.
+2. **Expense for Contract Owner**: The user who calls the withdraw function pays for all the gas, which can be really expensive.
+3. **Potential for Failure**: If even one transfer fails (e.g., due to a recipient contract throwing an error) the entire transaction will be reverted.
+
+## The Better Way — The Pull Pattern
+
+Instead of pushing funds to users, the pull pattern allows each user to withdraw their funds independently. This individualizes transactions, enhancing security and spreading out gas costs.
+
+```solidity
+// Pull pattern - RECOMMENDED
+mapping(address => uint256) public balances;
+
+function deposit() external payable {
+    balances[msg.sender] += msg.value;
+}
+
+function withdraw() external {
+    uint256 amount = balances[msg.sender];
+    require(amount > 0, "No funds to withdraw");
+    balances[msg.sender] = 0;
+    (bool success, ) = msg.sender.call{value: amount}("");
+    require(success, "Transfer failed");
+}
+```
+
+### Benefits of the Pull Approach:
+
+1. **Isolated Failures**: Each withdrawal is a separate transaction. If one fails, others are unaffected.
+2. **Fair Cost Distribution**: Users only pay for their own withdrawals, which distributes the gas costs more fairly.
+3. **Enhanced Efficiency**: Avoids the inefficiency of looping through potentially large arrays, leading to lower gas usage
+
+## OpenZeppelin's Implementation of the Pull Pattern
+
+If you want real world best practices, check how OpenZeppelin implements the Pull over Push pattern in its `PullPayment.sol` contract. This implementation leverages the Escrow contract to manage user funds securely, but the whole idea is pretty straightforward and should be clear for you already.
+
+```solidity
+// OpenZeppelin PullPayment example
+abstract contract PullPayment {
+    Escrow private immutable _escrow;
+
+    constructor() {
+        _escrow = new Escrow();
+    }
+
+    function withdrawPayments(address payable payee) public virtual {
+        _escrow.withdraw(payee);
+    }
+
+    function payments(address payee) public view returns (uint256) {
+        return _escrow.depositsOf(payee);
+    }
+
+    function _asyncTransfer(address dest, uint256 amount) internal virtual {
+        _escrow.deposit{value: amount}(dest);
+    }
+}
+```
+
+## Conclusion
+
+The "Pull over Push" pattern offers a significant improvement in managing ether transfers within Ethereum smart contracts. By letting users withdraw their funds independently, this method enhances security and mitigates the risk of transaction failures. However, it is essential for developers to weigh the trade-offs and ensure that users are well-informed about the withdrawal process to maximize efficiency and user satisfaction.

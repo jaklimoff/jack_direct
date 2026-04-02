@@ -1,0 +1,137 @@
+---
+title: Understanding Variable Types in Solidity
+description: Variables function as foundational elements in smart contracts. This guide explores the different variable types available in Solidity with practical examples.
+date: 2024-06-23
+image: /content/images/2024/06/variable-types-solidity.jpg
+authors:
+  - jack-klimov
+tags:
+  - solidity
+  - ethereum
+---
+
+## Introduction
+
+Variables function as foundational elements in smart contracts, encompassing numerous categories with distinct characteristics. This guide explores the different variable types available in Solidity with practical examples demonstrating real-world applications.
+
+## Booleans
+
+Straightforward and effective, boolean values can be either `true` or `false`. These constants frequently appear in conditional logic that directs smart contract execution.
+
+**Operators:** `!` (logical negation), `&&` (logical conjunction), `||` (logical disjunction), `==` (equality), `!=` (inequality)
+
+```solidity
+bool hasVoted;
+
+function vote() public {
+    require(!hasVoted, "You have already voted.");
+    hasVoted = true;
+    // Proceed with voting logic
+}
+```
+
+## Integers
+
+Both signed (`int`) and unsigned (`uint`) integer types exist in sizes ranging from `int8`/`uint8` to `int256`/`uint256`.
+
+**Operators:**
+- Comparisons: `<=`, `<`, `==`, `!=`, `>=`, `>`
+- Bitwise: `&`, `|`, `^`, `~`
+- Shift: `<<`, `>>`
+- Arithmetic: `+`, `-`, `*`, `/`, `%`, `**`
+
+```solidity
+uint256 public totalFunds;
+uint256 public fundingGoal = 100 ether;
+
+function contribute() public payable {
+    totalFunds += msg.value;
+    require(totalFunds <= fundingGoal, "Funding goal reached.");
+}
+```
+
+## Fixed Point Numbers
+
+While not yet completely integrated, fixed-point types (`fixed` and `ufixed`) represent decimal values with predetermined precision — critical for financial calculations.
+
+```solidity
+// Placeholder example as fixed point numbers are not fully supported
+ufixed128x18 exchangeRate = 1.2345;
+```
+
+## Address
+
+The `address` type stores a 20-byte Ethereum address. Two variants exist: standard `address` and `address payable`, where the latter accepts Ether transfers.
+
+```solidity
+address payable public owner;
+
+constructor() {
+    owner = payable(msg.sender);
+}
+
+function buyTokens() public payable {
+    owner.transfer(msg.value);
+}
+```
+
+## Enums
+
+Enumerations define sets of named constants, serving well for representing limited option sets like contract states.
+
+```solidity
+enum ShipmentStatus { Pending, Shipped, Delivered, Cancelled }
+ShipmentStatus public status;
+
+function updateStatus(ShipmentStatus _status) public {
+    status = _status;
+}
+```
+
+## Structs
+
+Custom composite types group multiple variables together, facilitating organization of intricate data arrangements.
+
+```solidity
+struct Property {
+    string location;
+    uint256 price;
+    address owner;
+}
+
+Property public property;
+
+function setProperty(string memory _location, uint256 _price, address _owner) public {
+    property = Property(_location, _price, _owner);
+}
+```
+
+## Arrays
+
+Both fixed-length and dynamic arrays store collections of identical-type values.
+
+```solidity
+address[] public participants;
+
+function enterLottery() public {
+    participants.push(msg.sender);
+}
+```
+
+## Mappings
+
+Key-value storage structures enable rapid data retrieval, functioning similarly to hash tables.
+
+```solidity
+mapping(address => uint256) public balances;
+
+function transfer(address _to, uint256 _amount) public {
+    require(balances[msg.sender] >= _amount, "Insufficient balance.");
+    balances[msg.sender] -= _amount;
+    balances[_to] += _amount;
+}
+```
+
+## Conclusion
+
+Mastering diverse variable types is essential for developing performant and secure smart contracts. Each category excels in particular scenarios — from booleans for access control to mappings for efficient data retrieval.

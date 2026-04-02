@@ -1,0 +1,55 @@
+---
+title: Wild West of AI Protocols
+description: The are way more protocols for AI agents out there besides MCP, that you might not even heard about! Let's check this "wild west" of agents communication toghether, shall we?
+date: 2025-07-01
+image: /content/images/2025/07/robots_communicating.png
+authors:
+  - jack-klimov
+tags:
+  - ai
+  - protocols
+  - agents
+featured: true
+---
+
+The are way more protocols for AI agents out there besides MCP, that you might not even heard about! Let's check this "wild west" of agents communication toghether, shall we?
+
+After watching teams struggle with fragmented agent systems for 2 years, I'm seeing a clear shift toward standardized protocols. The [paper from Shanghai Jiao Tong University](https://arxiv.org/pdf/2504.16736) just mapped the entire landscape, and it's bigger than most realize.
+
+## 🔧 Tool & Resource Access Protocols
+
+**Model Context Protocol (MCP)** - Well known Anthropic's open standard that acts like "USB-C for AI applications," enabling standardized bidirectional communication between AI assistants and external systems. It uses RPC, OAuth, and HTTP streaming to provide persistent context and tool access across different applications.
+
+**agents.json** - Wildcard AI's AI-native extension to OpenAPI that enables automatic tool discovery and workflow definition for AI agents. Basically a simple JSON file hosted at ⁠/.well-known/agents.json to expose available tools and their capabilities to AI systems.
+
+## 🤝 Inter-Agent Protocols
+
+**Agent2Agent Protocol (A2A)** - Google's protocol designed to enable seamless collaboration between AI agents within organizations. It leverages JSON-RPC, Server-Sent Events (SSE), and OpenAPI to facilitate structured communication and coordination between multiple agents.
+
+**Agent Network Protocol (ANP)** - A community-driven protocol focused on creating decentralized, cross-domain interoperability between AI agents. It uses JSON-LD and Decentralized Identifiers (DID) to enable agents from different domains and organizations to discover and interact with each other.
+
+**Agent Interaction & Transaction Protocol (AITP)** - NEAR Foundation's blockchain-based protocol that ensures secure and decentralized interactions between AI agents. It combines blockchain technology with HTTP to provide trustless, verifiable transactions and communications in multi-agent environments.
+
+**Agent Communication Protocol (AComP)** - IBM's protocol that defines standardized features and interfaces for multi-agent communication systems. It uses OpenAPI specifications to establish clear communication patterns and interaction models between different AI agents.
+
+**Agent Connect Protocol (AConP)** - LangChain's protocol that provides unified execution interfaces for AI agents across different platforms and frameworks. It uses OpenAPI and JSON to standardize how agents are invoked, managed, and coordinated within distributed systems.
+
+**Agora** - A meta-protocol system that enables dynamic protocol negotiation between AI agents using Large Language Models. It allows agents to automatically generate and agree upon communication protocols tailored to specific interaction contexts and requirements.
+
+## 🏭 Domain-Specific Protocols
+
+**Language Model Operating System (LMOS)** - Eclipse Foundation's protocol that creates an operating system-like environment for AI agents, particularly focused on IoT integration. It uses JSON-LD and DID to provide interoperability between AI agents and Internet of Things devices in distributed environments.
+
+**Agent Protocol** - AI Engineer Foundation's open control API that provides RESTful interfaces for managing and controlling AI agents. It uses OpenAPI specifications to standardize how agents are created, configured, and monitored across different platforms and implementations.
+
+**LOKA** - A decentralized protocol focused on ethical coordination and governance of AI agent networks. It uses Decentralized Ethical Coordination Protocols (DECP), DIDs, and Verifiable Credentials (VCs) to ensure responsible and transparent agent behavior in distributed systems.
+
+**PXP** - A bidirectional interaction protocol specifically designed for human-LLM communication and collaboration. It combines finite state machines with blackboard architectures to manage complex, stateful interactions between humans and AI language models.
+
+**CrowdES** - A specialized protocol for realistic robot-crowd simulation and interaction in physical environments. It uses Markov Chains combined with Diffusion Models to simulate and coordinate robot behavior within crowded, dynamic environments.
+
+**Spatial Population Protocols (SPPs)** - A protocol designed for achieving consensus among distributed robot systems in spatial environments. It uses self-stabilizing coordination algorithms to enable robots to reach agreement and coordinate actions despite failures or network partitions.
+
+## Final Thoughts
+
+The fragmentation is real. I've seen production systems break because teams built custom "glue code" between agents. But early adopters using these standards report 40% faster development cycles and significantly cleaner architectures. The pattern emerging: MCP for tool integration, A2A for agent collaboration, ANP for distributed systems. Most teams will need a combination, not just one.
