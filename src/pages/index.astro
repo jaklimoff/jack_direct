@@ -117,15 +117,17 @@ const websiteSchema = {
                   href={`/blog/${post.id}`}
                   class="block"
                 >
-                  <div class="aspect-[16/10] overflow-hidden rounded-lg mb-3 bg-muted">
-                    <img
-                      src={imageSrc}
-                      alt={post.data.title}
-                      class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      loading="lazy"
-                    />
+                  <div class="tilt-card mb-3" style="perspective: 500px;">
+                    <div class="aspect-[16/10] overflow-hidden rounded-lg bg-muted will-change-transform">
+                      <img
+                        src={imageSrc}
+                        alt={post.data.title}
+                        class="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
                   </div>
-                  <h3 class="font-semibold text-sm leading-snug group-hover:text-primary transition-colors line-clamp-3">
+                  <h3 class="font-semibold text-sm leading-snug group-hover:text-accent-foreground dark:group-hover:text-primary transition-colors line-clamp-3">
                     {post.data.title}
                   </h3>
                   <p class="text-xs text-muted-foreground/60 mt-1">
@@ -170,3 +172,26 @@ const websiteSchema = {
   </div>
 
 </Layout>
+
+<script>
+  document.querySelectorAll<HTMLElement>('.tilt-card').forEach((card) => {
+    const inner = card.firstElementChild as HTMLElement
+    const maxTilt = 15
+
+    card.addEventListener('mouseenter', () => {
+      inner.style.transition = 'none'
+    })
+
+    card.addEventListener('mousemove', (e) => {
+      const rect = card.getBoundingClientRect()
+      const x = (e.clientX - rect.left) / rect.width - 0.5
+      const y = (e.clientY - rect.top) / rect.height - 0.5
+      inner.style.transform = `rotateX(${-y * maxTilt}deg) rotateY(${x * maxTilt}deg)`
+    })
+
+    card.addEventListener('mouseleave', () => {
+      inner.style.transition = 'transform 0.3s ease-out'
+      inner.style.transform = ''
+    })
+  })
+</script>

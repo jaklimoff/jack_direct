@@ -108,13 +108,15 @@ try {
   >
     {
       post.data.image && (
-        <img
-          src={post.data.image}
-          alt={post.data.title}
-          width={1200}
-          height={630}
-          class="col-span-full mx-auto w-full max-w-5xl object-cover"
-        />
+        <div class="col-span-full mx-auto w-full max-w-5xl px-4 sm:px-6">
+          <img
+            src={post.data.image}
+            alt={post.data.title}
+            width={1200}
+            height={630}
+            class="w-full rounded-xl object-cover shadow-sm"
+          />
+        </div>
       )
     }
 
