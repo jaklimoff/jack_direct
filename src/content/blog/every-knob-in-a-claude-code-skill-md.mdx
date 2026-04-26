@@ -1,0 +1,221 @@
+---
+title: "Every Knob in a Claude Code SKILL.md: The Hidden Frontmatter Reference"
+description: A senior engineer's guide to all 18 Claude Code SKILL.md frontmatter fields, the context fork pair, body templating, and the bugs you'll hit.
+date: 2026-04-26
+image: /content/images/2026/04/every-knob-in-a-claude-code-skill-md.png
+authors:
+  - jack-klimov
+tags:
+  - claude-code
+  - skills
+  - ai
+  - agents
+featured: true
+---
+
+You think SKILL.md has four fields. It has eighteen. And the field engineers keep asking about, `timeout:`, doesn't exist.
+
+Treat the frontmatter as a control surface. Most authors wire up `name`, `description`, maybe `allowed-tools`, then ship. The other fifteen knobs sit unwired. Two of them turn a skill from "a slash command with bundled files" into a real isolated subagent task that ships with its own permission boundary and model selection.
+
+This post walks every knob. Which ones matter. Which ones are folklore. Which ones have shipped bugs you'll hit on day one.
+
+## What Fields Does a Claude Code SKILL.md Actually Support?
+
+Fifteen Claude Code extensions plus three fields from the cross-vendor [Agent Skills spec](https://agentskills.io/specification). Only those last three round-trip cleanly to OpenCode, Codex CLI, Copilot CLI, or Mintlify. Everything else gets silently dropped by other runtimes.[^1]
+
+Here is the canonical maximal example. Then we'll unpack:
+
+```yaml
+---
+name: deep-research
+description: Run a parallel deep-dive research pass and return a synthesized report.
+when_to_use: User asks for "research X", "deep-dive into Y", or pastes a long URL list.
+argument-hint: [topic] [optional-corpus]
+arguments:
+  - topic
+  - corpus
+allowed-tools:
+  - Read
+  - Grep
+  - Bash(rg:*)
+  - mcp__exa__search
+model: claude-opus-4-7
+effort: high
+context: fork
+agent: Explore
+paths:
+  - "research/**"
+  - "docs/**"
+disable-model-invocation: false
+user-invocable: true
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      once: true
+      hooks:
+        - type: command
+          command: echo "skill started at $(date)" >> .skill-log
+shell: bash
+license: Apache-2.0
+compatibility: Requires `rg` on PATH and an Exa MCP server.
+metadata:
+  version: 1.2.0
+  author: jack-klimov
+  category: research
+---
+```
+
+That's all eighteen. Most you'll never touch. A few you should reach for far more than you do.
+
+### The five identity knobs
+
+`name` is kebab-case, ≤64 chars, and **must match the parent directory exactly**. Mismatch and the skill silently fails to load. No error. No warning. Nothing in `/skills`. I once burned two hours on a skill named `myorg/research` because the slash made it disappear without a peep.
+
+`description` is the single most important field in the whole file. It's Claude's primary trigger signal. Front-load the use case in the first sentence. The hard cap is 1,024 characters, but `description` plus `when_to_use` get concatenated and truncated together at **1,536 chars** in the live skills listing. Anything past that, Claude never sees.
+
+`when_to_use` is the place to dump trigger phrases and example prompts you don't want polluting the description proper. `argument-hint` is pure UI: the `[issue-number]` style autocomplete shown after `/skill-name`. `arguments:` is the actually useful one, because it lets you write `$topic` in the body instead of `$1`.
+
+### The four scope-and-trigger knobs
+
+`allowed-tools` is where most authors stop reading. Worth understanding precisely. It **grants** tools without permission prompts; it does not restrict. Denied tools stay denied. Accepts patterns: `Bash(git add:*)`, bare names like `Read`, MCP identifiers like `mcp__sentry__list_issues`. The Agent SDK ignores this field entirely and uses its own `allowedTools` config, so don't expect parity.
+
+`paths:` is the closest thing Claude Code has to file-pattern auto-activation. The skill loads automatically only when Claude is touching files matching the globs. Pair this with a tightly-scoped `description` and you stop bleeding context budget on skills that don't apply to the current task.
+
+`disable-model-invocation: true` removes the skill from Claude's context entirely. Only the user can run it via `/name`. The trap: this flag also blocks the skill from being preloaded into subagents via the subagent's `skills:` field. If you mark a skill model-disabled and then expect a subagent to reach for it, the subagent won't see it.
+
+`user-invocable: false` does the inverse. The skill is hidden from the slash menu but Claude can still auto-invoke it. Useful for "background knowledge" skills you want available but don't want users typing.
+
+### The four execution knobs (where it gets interesting)
+
+`model` switches model for this skill's turn only. Session model resumes on the next turn. Accepts the same values as `/model`, including `inherit`. Pair with `effort: low|medium|high|xhigh|max` to override thinking budget per skill. A documentation-fetch skill probably wants `model: claude-haiku-4-5` and `effort: low`. A planning skill wants Opus and `high`.
+
+`context: fork` is the biggest knob in the file and almost no one is using it. With this set, the rendered SKILL.md body becomes the **task prompt** for a freshly spawned subagent. The subagent gets its system prompt, tool whitelist, model, and permission scope from whatever `agent:` names: built-ins like `Explore` (read-heavy investigation) or `Plan` (structured planning), or any custom agent in `.claude/agents/`. The subagent does not see your conversation history. Only its final summary returns.[^2]
+
+This collapses the historical wall between "skills as prompts" and "subagents as policies." A forked skill is effectively an authored, named, version-controllable subagent task that travels with its own permission boundary.
+
+```yaml
+context: fork
+agent: Explore
+```
+
+Drop those two lines on any skill that does heavy file traversal or generates plans. Your main thread stops drowning in tool-call noise. CLAUDE.md still loads in the fork. Intermediate tool calls don't pollute the parent.
+
+Two real caveats. Forks only make sense for skills with explicit instructions, not pure reference material (the subagent gets the rules but no actionable task and returns nothing useful). And [issue #17283](https://github.com/anthropics/claude-code/issues/17283) reports that when Claude invokes the skill *via the Skill tool* rather than slash command, `context: fork` and `agent:` are currently ignored. The fields are real and shipped in 2.1; the autonomous-invocation path just hasn't been wired through. If isolation is critical, design the skill for slash invocation today.
+
+### The two lifecycle knobs
+
+`hooks:` accepts the same `PreToolUse`, `PostToolUse`, `Stop` shape as global hooks, with two skill-specific behaviors worth knowing. Hook entries support `once: true` for single-fire-per-invocation, a feature subagents lack. And `Stop` automatically becomes `SubagentStop` when the skill runs forked.
+
+`shell: bash` (default) or `shell: powershell` controls the shell used for the inline `!` injection syntax in the body. PowerShell also needs `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` set in the environment.
+
+### The three open-standard knobs
+
+`license` is required if you want to upload the skill to Anthropic's Skills API. Either an SPDX identifier (`Apache-2.0`) or descriptive text ("Complete terms in LICENSE.txt"). Anthropic's own first-party skills use the descriptive form.
+
+`compatibility` is free text up to 500 chars. Declare required runtimes, packages, network access. Marked experimental in the spec.
+
+`metadata` is a free-form `string → string` map. **This is where `version`, `author`, `tags`, `category`, and `last-updated` actually live.** There is no top-level `version:` or `author:` field. Standardizing them is an open feature request ([#26438](https://github.com/anthropics/claude-code/issues/26438)).
+
+## Which Fields Don't Exist (Even Though Blog Posts Say They Do)?
+
+Treat anything off the list above as folklore. Specifically:
+
+* `timeout:` does not exist on skills. Subagents have `maxTurns`; skills have neither.
+* `tools:` (bare) is a **subagent** field, not a skill field. It restricts as an allowlist. The skill equivalent is `allowed-tools` and it grants without restricting. Confusing the two is the source of half the "why isn't my permission working" threads.
+* Top-level `version:` and `author:` belong inside `metadata:`.
+* `requires:`, `depends-on:`, `prerequisite-skills:`, `triggers:`, `keywords:`, `tags:`, `permissions:`, `sandbox:`, `pre:`, `post:`, `output-format:`, `max-tokens:`, `temperature:`: none of these are in the spec.
+* The `mode:` field that one popular deep-dive blog claims exists. Unverifiable in any official source.
+
+The bundled SKILL.md validator ([#25380](https://github.com/anthropics/claude-code/issues/25380)) makes this worse by knowing only the agentskills.io base spec. It will warn on documented Claude Code extensions like `allowed-tools`, `hooks`, `context`, and `agent`. The warnings are wrong. The fields work. Ignore them.
+
+## How Does Body Templating Work?
+
+The body of SKILL.md is not static markdown. Claude Code preprocesses it before the model ever sees it. Five substitutions and one preprocessing primitive:
+
+| Syntax | Behavior |
+|:---|:---|
+| `$ARGUMENTS` | Full argument string. If you don't reference it, Claude Code appends `ARGUMENTS: <value>` automatically. |
+| `$ARGUMENTS[N]` / `$N` | Indexed positional, 0-based, shell-quoted at the call site. |
+| `$name` | Named positional from your `arguments:` list. |
+| `${CLAUDE_SESSION_ID}` | Session ID. Useful for log filenames. |
+| `${CLAUDE_SKILL_DIR}` | Absolute path to this SKILL.md's directory. Lets bundled scripts run regardless of cwd. |
+| `` !`<command>` `` | **Inline shell injection.** Runs *before* Claude sees the prompt; output replaces the placeholder. Preprocessing, not tool use. |
+| ```` ```! ```` fenced block | Multi-line shell injection, same semantics. |
+
+The shell injection is the underused one. It runs at preprocessing time, so the model sees the *output* in place of the command. A real example from a dependency-review skill:
+
+```markdown
+Today's lockfile changes:
+
+!`git diff HEAD~1 -- package-lock.json | head -50`
+
+Flag any new transitive dependencies above and recommend a security review.
+```
+
+There is no `@path/file` substitution inside SKILL.md bodies. That syntax is for interactive prompts and MCP resources. Skills reference bundled files via plain relative-path Markdown links, and Claude reads them on demand with the `Read` tool.
+
+One more primitive worth knowing: drop the literal string **`ultrathink`** anywhere in the body and the turn runs in extended thinking mode.
+
+The shell-injection feature can be disabled globally with `"disableSkillShellExecution": true` in settings. Bundled and managed-policy skills are exempt from that setting.
+
+## How Does the Three-Tier Loading Model Save You Tokens?
+
+This is the architectural reason skills scale where slash commands didn't.
+
+Tier 1 is metadata: `name`, `description`, `when_to_use`. Loaded into the system prompt's `<available_skills>` block at session start. Roughly 100 tokens per skill. This is what Claude scans to decide whether to invoke.
+
+Tier 2 is the rendered body: frontmatter stripped, substitutions applied. Loaded only on invocation. Recommended ceiling 5,000 tokens or 500 lines. Once invoked, the body persists as a single message for the rest of the session: Claude doesn't re-read on subsequent turns. Write standing instructions, not one-time steps.
+
+Tier 3 is bundled files: anything in the skill directory. Zero context cost until accessed. The conventional layout uses `scripts/` for executable code Claude runs through `Bash` (the source never enters context, only stdout does), `references/` for markdown loaded on demand, `assets/` for templates and outputs.
+
+After auto-compaction kicks in, the most recent invocation of each skill is re-attached at up to 5,000 tokens each, sharing a combined 25,000-token budget filled most-recent-first. The skills-listing budget itself is dynamic at 1% of the context window, with `SLASH_COMMAND_TOOL_CHAR_BUDGET` as the override.
+
+## Skills, Subagents, and Slash Commands: What's the Actual Difference?
+
+Same frontmatter syntax. Three different execution models. Most "wrong field" bugs trace to confusing them:
+
+| Concern | SKILL.md | `.claude/agents/*.md` | `.claude/commands/*.md` (legacy) |
+|:---|:---|:---|:---|
+| Tool grant field | `allowed-tools` (grants no-prompt) | `tools` (allowlist that **restricts**) | `allowed-tools` |
+| Body becomes | Injected user message | The subagent's **system prompt** | Injected user message |
+| Auto-trigger | Yes, via description | Yes, via description | No, user-invoked only |
+| Bundled files | Whole directory | Single file | None |
+| Isolation | Opt-in via `context: fork` | Always isolated | None |
+| Persistent memory | n/a | `memory: user\|project\|local` | n/a |
+| Worktree isolation | n/a | `isolation: worktree` | n/a |
+| Max-turn cap | none | `maxTurns` | none |
+
+Slash commands have officially folded into skills and are now legacy. If `.claude/commands/foo.md` and `.claude/skills/foo/SKILL.md` collide, the skill wins.
+
+## Discovery, Precedence, and the Hot Reload Story
+
+Skills load from four sources with strict precedence: enterprise > personal (`~/.claude/skills/`) > project (`.claude/skills/`) > plugin (`plugin-name:skill-name`). Plugin skills can never name-collide because they're namespaced.
+
+Claude Code 2.1 added hot reload. Edits to skills inside watched directories take effect mid-session without restart. Brand-new top-level skill directories still need a restart to be picked up. Monorepos get nested discovery: working in `packages/frontend/` surfaces `packages/frontend/.claude/skills/` too. Skills are the only `.claude/` config respected from `--add-dir` roots; subagents, commands, and output styles aren't.
+
+You can also gate invocation at runtime with permission rules of the form `Skill(name)` or `Skill(name *)`. Or deny the entire `Skill` tool wholesale when you want a session that never touches any skill.
+
+## What Are the Bugs You'll Actually Hit?
+
+Three to plan around.
+
+[#17283](https://github.com/anthropics/claude-code/issues/17283): `context: fork` and `agent:` only fire on slash invocation, not Skill-tool autonomous invocation. Workaround: design isolation-critical skills for slash use until the tool path is wired through.
+
+[#25380](https://github.com/anthropics/claude-code/issues/25380): the validator warns on legitimate Claude Code extensions because it only knows the open-standard subset. Treat its complaints about `allowed-tools`, `hooks`, `context`, `agent` as noise.
+
+The name-mismatch trap: directory and `name:` field must match exactly. Slashes, capital letters, the words "anthropic" or "claude" anywhere in the name will all kill the skill silently. No log line, no error, just absence. Check `/skills` after every rename.
+
+## The Two Knobs You Should Reach For This Week
+
+If you take exactly two things from this post, take these.
+
+Add `paths:` globs to every skill that's only relevant to specific files. Stop loading research-tool skills into every Rails session. Stop loading frontend-test skills when you're editing `Cargo.toml`. The metadata budget is finite. Spend it well.
+
+And try `context: fork` with `agent: Explore` on your next read-heavy skill. Watch your main thread stay clean while the fork burns through twenty file reads to produce one summary message. It's the closest the platform gets to "spawn a research analyst, give them a brief, only show me their report." Once you feel the difference, you won't go back.
+
+The defining feature of SKILL.md isn't the eighteen knobs. It's that two of them turn an inline prompt into an isolated subagent task that ships with its own permission boundary and model selection. That's the whole game. The rest is plumbing.
+
+## References
+
+[^1]: https://code.claude.com/docs/en/skills
+[^2]: https://agentskills.io/specification
