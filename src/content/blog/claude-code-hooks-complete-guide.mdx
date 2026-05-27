@@ -1,0 +1,227 @@
+---
+title: "Claude Code Hooks: The Deterministic Layer You're Not Using Yet"
+description: A senior engineer's complete guide to Claude Code hooks, the 28-event lifecycle, exit-code-2 blocking, the RCE history, and the patterns worth shipping.
+date: 2026-05-26
+image: /content/images/2026/05/claude-code-hooks-complete-guide.png
+authors:
+  - jack-klimov
+tags:
+  - claude-code
+  - hooks
+  - ai
+  - agents
+featured: true
+---
+
+Your CLAUDE.md is a wish. Your hooks are a contract.
+
+Write "always run the formatter before finishing" in CLAUDE.md and the model will obey it most of the time, then forget right after the first compaction. Wire the same instruction as a `PostToolUse` hook and it fires every single edit, forever, whether the model remembers or not. That gap, between advisory and deterministic, is the whole point of hooks. And almost nobody uses them past the toy formatter example.
+
+Here's the part that should get your attention: as of Claude Code v2.1.145 (May 2026), the hook lifecycle spans roughly 28 events, hooks run with your full shell credentials and no sandbox, and a malicious `.claude/settings.json` in a cloned repo earned its own CVE this past January.[^1] This is the most capable and the most dangerous extension point in the tool. Let me walk the whole surface.
+
+## What's the Difference Between a Hook and a CLAUDE.md Rule?
+
+Think of the agent as a brilliant contractor you've handed the keys to your house. Skilled, fast, occasionally does something you'd never have authorized if you'd been watching. CLAUDE.md is the list of house rules taped to the fridge. The contractor reads it, mostly follows it, and ignores it the moment the job gets interesting.
+
+Hooks are the actual home-security system. Some are locks that refuse to open (a `PreToolUse` deny on `rm -rf`). Some are cameras that just record (an async audit log). Some hand the contractor a briefing the second they walk in (`SessionStart` context injection). The contractor's judgment doesn't change what the locks do. That's the design philosophy in one line: hooks are guarantees, not requests.
+
+The official reference puts it plainly: hooks are "user-defined shell commands, HTTP endpoints, or LLM prompts that execute automatically at specific points in Claude Code's lifecycle."[^2] They sit *outside* the model. The model can't talk its way past them, and neither can a subagent (your gates apply recursively to every child context too).
+
+Claude Code has six extension layers, and they're easy to confuse. CLAUDE.md is advisory context the model reads. Slash commands and skills are procedural knowledge somebody invokes. Subagents are isolated child contexts that return summaries. MCP servers hand the model new tools. Plugins bundle all of that for distribution. Hooks are the only layer that's deterministic by construction.
+
+## When Do Hooks Actually Fire? The 28-Event Lifecycle
+
+Most blog posts list nine events. That was the June 2025 launch set, shipped in v1.0.38.[^3] The lifecycle has roughly tripled since.
+
+The events fall into three cadences. Once per session: `SessionStart`, `SessionEnd`. Once per turn: `UserPromptSubmit`, `Stop`, `StopFailure`. Once per tool call inside the agentic loop: `PreToolUse`, `PostToolUse`. Everything else hangs off those rhythms.
+
+Rather than dump all 28, here are the ones you'll actually wire, grouped by what they let you do:
+
+| Event | Fires when | Can it block? |
+|:---|:---|:---|
+| `SessionStart` | Session begins, resumes, or clears | No (injects context) |
+| `UserPromptSubmit` | You hit enter, before the model sees it | Yes (erases the prompt) |
+| `PreToolUse` | Tool params built, before execution | Yes (the rich four-way decision) |
+| `PostToolUse` | A tool call succeeds | Yes (aborts the turn) |
+| `PostToolUseFailure` | A tool call fails | No (already failed) |
+| `Stop` | The model finishes responding | Yes (forces continuation) |
+| `SubagentStop` | A subagent finishes | Yes (subject to safety cap) |
+| `PreCompact` | Before context compaction | Yes (blocks compaction) |
+| `Notification` | The model needs your attention | No (fire a desktop alert) |
+| `SessionEnd` | Session terminates | No (cleanup only) |
+
+The long tail covers agent-team coordination (`TaskCreated`, `TaskCompleted`, `TeammateIdle`), reactive file and config watching (`FileChanged`, `ConfigChange`, `CwdChanged`), worktree management (`WorktreeCreate`, `WorktreeRemove`), MCP elicitation (`Elicitation`, `ElicitationResult`), and pure observability (`InstructionsLoaded`, `PostCompact`, `StopFailure`). Most of those are niche. You can ignore them until you can't.
+
+`PreToolUse` is the one that earns its keep. It's the only event with a four-way permission decision: `allow`, `deny`, `ask`, `defer`. When several `PreToolUse` hooks return conflicting verdicts, precedence runs `deny > defer > ask > allow`. The strictest hook wins, which is exactly what you want from a security control.
+
+One sharp edge worth knowing now: every hook receives a common set of fields on stdin (`session_id`, `cwd`, `permission_mode`, `hook_event_name`, and friends), but only three events feed their plain stdout back to the model as context. Those are `SessionStart`, `UserPromptSubmit`, and `UserPromptExpansion`. Everywhere else, your stdout goes to the debug log and nowhere near the conversation. Print a helpful note from a `PostToolUse` hook expecting the model to read it, and you'll wonder for an hour why nothing happens.
+
+## How Do You Configure a Hook?
+
+Hooks live in JSON settings files, and the schema has exactly three levels of nesting: event, then matcher group, then handler array.
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(rm *)",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-rm.sh",
+            "timeout": 30,
+            "statusMessage": "Checking for dangerous rm…"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The outer key is the event. It maps to an array of matcher groups (`{matcher, hooks}`). Each group holds an inner array of handlers. The matcher decides *which* tools or sources trigger the group; the `if` field on a handler narrows it further using permission-rule syntax like `Bash(git *)` or `Edit(*.ts)`.
+
+Five places can define hooks, and they stack. Your `~/.claude/settings.json` covers every project on the machine. A repo's `.claude/settings.json` (committed) sets team-wide guardrails. `.claude/settings.local.json` (gitignored) holds your private experiments. Managed policy settings let an org admin enforce hooks nobody can disable. Plugins ship their own `hooks/hooks.json`. Enterprise teams under a compliance regime should know about `allowManagedHooksOnly: true`, which blocks user, project, and plugin hooks while keeping the managed ones; a user-level `disableAllHooks` can't touch a managed hook.
+
+### Five handler types, not one
+
+Competitors ship command-only hooks. Claude Code gives you five handler types: `command`, `http`, `mcp_tool`, `prompt`, and the experimental `agent`. A `command` hook shells out. An `http` hook POSTs the same JSON to your endpoint. An `mcp_tool` hook calls a tool on a connected MCP server. A `prompt` hook runs an LLM prompt, and `agent` spawns a whole subagent. The matcher grammar is identical across all of them.
+
+That matcher grammar has a trap. Only letters, digits, the `_` character, and the pipe count as "literal" (so `Edit|Write` is a list and `Bash` is exact). Any other character flips the whole string into JavaScript regex. This bites hardest with MCP tools, which follow the `mcp__<server>__<tool>` naming pattern. To match every tool from the memory server you must write `mcp__memory__.*` with the trailing `.*`, because bare `mcp__memory` is alphanumeric, gets treated as an exact string, and matches nothing.
+
+### Exec form versus shell form: the detail that breaks Windows
+
+This one's load-bearing. When a command hook has no `args` field, the `command` string is handed to `sh -c` and tokenized by the shell. Add an `args` array and Claude Code spawns the executable directly, no shell, no tokenization. Special characters (`$`, backticks, apostrophes) pass through verbatim.
+
+```json
+{
+  "type": "command",
+  "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/format.sh",
+  "args": ["--write", "${tool_input.file_path}"]
+}
+```
+
+Use exec form (with `args`) whenever a hook references a path placeholder. Each `args` element becomes one argument, exactly as written, so a filename with a space won't blow up your script. The catch lives on Windows: exec form needs `command` to resolve to a real `.exe`. The `.cmd` and `.bat` shims that `npm`, `npx`, and `eslint` install won't run in exec form. You either drop to shell form or invoke `node` directly.
+
+A few environment variables are worth memorizing. `CLAUDE_PROJECT_DIR` is the repo root, and you should prefix every script path with it. `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA` matter for plugin authors (the first changes on every update; the second survives). And `CLAUDE_ENV_FILE`, available only to `SessionStart`, `Setup`, `CwdChanged`, and `FileChanged`, lets you append `export VAR=value` lines that get sourced into every later Bash call in the session. That's how you do direnv-style reactive environments without the model knowing.
+
+## Why Exit Code 2 Is the Only Number That Matters
+
+Forget everything Unix taught you about exit codes here. Exit 1 does not block. It logs a warning and execution continues. The only code that blocks is 2.
+
+| Exit | Meaning |
+|:---|:---|
+| `0` | Success. stdout parsed as JSON (and shown to the model only for SessionStart / UserPromptSubmit / UserPromptExpansion). |
+| `2` | Blocking error. JSON ignored; stderr fed back to the model or shown to you. |
+| anything else | Non-blocking error. A warning lands in the transcript and the agent rolls on. |
+
+I've watched a security engineer ship a "blocker" that used `exit 1`, run a triumphant demo, and only later realize the dangerous command had executed every time. The hook fired. It "failed." Nothing stopped. Exit 2 is the difference between a camera and a lock.
+
+What exit 2 *does* depends on the event. On `PreToolUse` it blocks the tool. On `UserPromptSubmit` it erases your prompt. On `Stop` and `SubagentStop` it prevents stopping and forces the conversation to continue. On `PreCompact` it blocks compaction. On `PostToolUse` the tool already ran, so exit 2 can't undo anything; it just surfaces your stderr to the model as feedback. And on `WorktreeCreate`, the lone exception to the whole rule, *any* non-zero exit aborts.
+
+For richer control you return JSON on stdout with exit 0. The shape varies by event. `PreToolUse` uses a `hookSpecificOutput` block:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "Destructive command blocked by hook"
+  }
+}
+```
+
+Other events take a top-level `decision: "block"` with a `reason`. A universal `continue: false` plus `stopReason` halts the agent entirely and overrides any event-specific decision. There's also `additionalContext` for injecting text, `updatedInput` for rewriting a tool's arguments before it runs, and `terminalSequence` for firing race-free desktop notifications (more on why you need that below).
+
+## The Footguns That Will Burn a Session
+
+Hooks are sharp. A handful of behaviors will cost you real time if you don't know them up front.
+
+**`stop_hook_active` is the number-one trap.** A `Stop` hook that always returns `decision: "block"` tells the model to keep going, which triggers the `Stop` hook again, which blocks again. Community bug #55754 documented exactly this: an unconditional Stop block burned an entire ~50-minute session quota before anyone noticed.[^4] Every Stop hook must check the `stop_hook_active` field and bail early when it's true. Anthropic added an 8-block safety cap in v2.1.143, but don't rely on the seatbelt; gate the field.
+
+```bash
+#!/bin/bash
+# .claude/hooks/test-gate.sh
+INPUT=$(cat)
+# already in forced-continuation? let the model stop, or we loop forever
+if [ "$(echo "$INPUT" | jq -r '.stop_hook_active')" = "true" ]; then
+  exit 0
+fi
+if ! npm test --silent 2>/dev/null; then
+  echo "Tests are failing. Fix them before finishing." >&2
+  exit 2
+fi
+exit 0
+```
+
+**Shell-profile pollution silently breaks JSON.** If your `~/.zshrc` prints anything on startup (an nvm version line, a welcome banner), that text mixes into your hook's stdout and corrupts the JSON parse. Wrap noisy startup output in `if [[ $- == *i* ]]; then ... fi` so it only runs for interactive shells.
+
+**There's no `/dev/tty` anymore.** As of v2.1.139, hooks run without a controlling terminal on macOS and Linux. The old trick of writing notifications straight to the TTY is dead. Use the `terminalSequence` JSON field instead, which accepts a tight allowlist of OSC escape sequences (`0`, `1`, `2`, `9`, `99`, `777`, plus BEL). Anything outside that list, including OSC 52 clipboard writes, gets rejected.
+
+**`defer` only works on single-tool turns.** If the model fires several tool calls in parallel, a `defer` decision is ignored with a warning. It exists mostly for the headless `-p` mode.
+
+**Hooks are snapshotted at session start.** A file watcher picks up edits for *new* invocations, but the snapshot in flight is locked. That's deliberate: it stops the model from rewriting its own guardrails mid-turn.
+
+## Can a Repository's Hooks Hack Your Laptop?
+
+Yes. This isn't theoretical, and it's the reason you should read a stranger's `.claude/settings.json` like you'd read a `curl | sudo bash` one-liner.
+
+Check Point Research walked through three findings under the banner "Caught in the Hook."[^5] The first, GHSA-ph6w-f82w-28w6, was disclosed in July 2025 and fixed in August: a repo-controlled `.claude/settings.json` could run arbitrary shell commands the moment you opened the project. Just opening it. The second was a bypass of the MCP-server consent dialog via repo-controlled config. The third, CVE-2026-21852, published by Anthropic on January 21, 2026, covered repo-controlled configuration that could exfiltrate Anthropic API keys, nastier still when combined with the Workspaces feature.[^1]
+
+Then, on March 31, 2026, someone shipped a 59.8 MB source-map file inside `@anthropic-ai/claude-code@2.1.88`, exposing the unobfuscated TypeScript for the harness including the hook and permission logic.[^6] If an attacker needed a map of where the locks are, they got one.
+
+Anthropic's response was sensible: a stronger "untrusted project directory" warning that covers both hooks and MCP, the `allowManagedHooksOnly` flag for enterprise lockdown, a guarantee that MCP servers won't execute before approval, and the snapshotted-at-startup model. The mitigations are good. The threat model is permanent. Hooks run as you, with your credentials, with no sandbox, and a hostile repo is one `git clone` away.
+
+So: don't run Claude Code as root (a standard user account contains the blast radius). Treat any inbound `.claude/settings.json` as executable code in review. Block path traversal in your own hooks by rejecting `..`. Always quote your shell variables (`"$VAR"`, not `$VAR`). And skip the sensitive files: a `PreToolUse` deny on `.env`, `.git/`, and `*.pem` paths is ten minutes of work that pays for itself the first time the model tries to read your secrets.
+
+## What Do People Actually Use Hooks For?
+
+The canonical first hook is a `PostToolUse` formatter on `Write|Edit|MultiEdit`. The model edits, Prettier or Black or gofmt runs, and "the model forgot to format" stops being a sentence anyone says. The canonical second hook is a `PreToolUse` blocker for destructive Bash:
+
+```bash
+#!/bin/bash
+# .claude/hooks/block-rm.sh
+COMMAND=$(jq -r '.tool_input.command')
+if echo "$COMMAND" | grep -q 'rm -rf'; then
+  jq -n '{ hookSpecificOutput: {
+    hookEventName: "PreToolUse",
+    permissionDecision: "deny",
+    permissionDecisionReason: "Destructive command blocked by hook" } }'
+else
+  exit 0
+fi
+```
+
+The interesting patterns go further. A `SessionStart` hook that prints `git status`, the current branch, and recent CI state gives every fresh session the context a human would glance at first. Audit shops route `UserPromptSubmit` and `PostToolUse` through an `async: true` HTTP hook into a SIEM, so every action lands in the security log without slowing the agent down. HIPAA teams scan every `Write` input for patient-data patterns and block edits to PHI-bearing files.
+
+The most impressive production story is Spotify's "Honk." They've merged more than 1,500 pull requests through a `Stop`-hook verification loop, and roughly half of all PRs pushed at Spotify since mid-2024 ran through this approach.[^7] The deliberate design choice is the lesson: the agent doesn't know how verification works. It just gets pass/fail feedback and keeps going until it passes. The guarantee lives in the hook, not in the model's good intentions.
+
+If you want a reference implementation to crib from, Anthropic ships `examples/hooks/bash_command_validator_example.py` in the `anthropics/claude-code` repo, which validates Bash commands and rewrites `grep` calls to `rg`.[^8] The community repo `disler/claude-code-hooks-mastery` demonstrates every event with single-file Python scripts and is the most-referenced starting point.[^9]
+
+## A Word on Performance
+
+Hooks cost time, and the cost compounds. Command hooks add roughly 5 ms of spawn overhead. Prompt hooks run 300 to 2000 ms. Agent hooks can take 2 to 10 seconds. A formatter that runs on every single file edit at 500 ms each will make a long session feel like wading through mud.
+
+Time your hooks with `time` before you commit them. A reasonable ceiling is about 200 ms per hook; past 500 ms, move the work to an `async: true` variant (fire-and-forget, output can't influence the current call) or shift it to a `Stop` hook that runs once per turn instead of once per edit. The `tsgo` native Go port of `tsc` is fast enough to gate every turn under a second, which is the bar to aim for.
+
+## Wire the Guarantee, Not the Wish
+
+The teams getting real value out of Claude Code in 2026 aren't the ones with the longest CLAUDE.md. They're the ones who moved their non-negotiables out of the advisory layer and into the deterministic one. Tests must pass before a turn ends. Secrets are unreadable. Destructive commands die at the gate. None of that depends on the model being in a good mood after its third compaction.
+
+Start with three hooks this week: a `PostToolUse` formatter, a `PreToolUse` deny on your secret files, and a `stop_hook_active`-gated test gate. Time each one. Then read your own `.claude/settings.json` like an attacker would, because the next person to clone your repo will inherit every lock you built and every one you forgot.
+
+The contractor has the keys either way. The only question is whether you wired the alarm.
+
+## References
+
+[^1]: https://docs.anthropic.com/en/docs/claude-code/hooks
+[^2]: https://docs.anthropic.com/en/docs/claude-code/hooks-guide
+[^3]: https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md
+[^4]: https://github.com/anthropics/claude-code/issues/55754
+[^5]: https://research.checkpoint.com/2026/caught-in-the-hook-claude-code/
+[^6]: https://www.zscaler.com/blogs/security-research/claude-code-source-map-exposure
+[^7]: https://engineering.atspotify.com/2025/11/honk-agentic-verification-loops
+[^8]: https://github.com/anthropics/claude-code/blob/main/examples/hooks/bash_command_validator_example.py
+[^9]: https://github.com/disler/claude-code-hooks-mastery
