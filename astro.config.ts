@@ -1,3 +1,5 @@
+import { readdirSync } from 'node:fs'
+
 import { defineConfig } from 'astro/config'
 
 import mdx from '@astrojs/mdx'
@@ -18,8 +20,33 @@ import { pluginLineNumbers } from '@expressive-code/plugin-line-numbers'
 
 import tailwindcss from '@tailwindcss/vite'
 
+const blogSlugs = readdirSync(new URL('./src/content/blog', import.meta.url))
+  .filter((file) => file.endsWith('.mdx'))
+  .map((file) => file.replace(/\.mdx$/, ''))
+
+// Legacy Ghost URLs: posts lived at the site root, plus a few renamed slugs
+const legacyRedirects: Record<string, string> = {
+  ...Object.fromEntries(
+    blogSlugs.map((slug) => [`/${slug}`, `/blog/${slug}/`]),
+  ),
+  '/cap-theorem-for-developers-what-it-is-and-how-it-affects-distributed-systems':
+    '/blog/cap-theorem-for-developers/',
+  '/reflections-on-kotters-8-step-change-model-a-practical-guide-for-navigating-transformation':
+    '/blog/reflections-on-kotters-8-step-change-model/',
+  '/author/jack': '/about/',
+  '/author/jack/page/2': '/about/',
+  '/author/jaklimoff': '/about/',
+  '/page/2': '/blog/2/',
+  '/page/3': '/blog/2/',
+}
+
+const redirectPaths = new Set(
+  Object.keys(legacyRedirects).map((path) => `https://jack.direct${path}/`),
+)
+
 export default defineConfig({
   site: 'https://jack.direct',
+  redirects: legacyRedirects,
   // Static output for GitHub Pages
   integrations: [
     expressiveCode({
@@ -67,7 +94,7 @@ export default defineConfig({
     }),
     mdx(),
     react(),
-    sitemap(),
+    sitemap({ filter: (page) => !redirectPaths.has(page) }),
     icon(),
   ],
   vite: {

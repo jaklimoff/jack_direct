@@ -10,9 +10,13 @@ import { cn } from '@/lib/utils'
 
 interface Props {
   class?: string
+  title?: string
+  description?: string
+  image?: string
+  type?: 'website' | 'article'
 }
 
-const { class: className } = Astro.props
+const { class: className, title, description, image, type } = Astro.props
 ---
 
 <!doctype html>
@@ -20,7 +24,7 @@ const { class: className } = Astro.props
   class="bg-background text-foreground scheme-light-dark"
   lang={SITE.locale}
 >
-  <Head>
+  <Head title={title} description={description} image={image} type={type}>
     <slot name="head" />
   </Head>
   <body class="flex h-fit min-h-screen flex-col gap-y-6 font-sans" transition:persist>
