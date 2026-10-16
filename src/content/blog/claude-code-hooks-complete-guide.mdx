@@ -1,6 +1,6 @@
 ---
 title: "Claude Code Hooks: The Deterministic Layer You're Not Using Yet"
-description: A senior engineer's complete guide to Claude Code hooks, the 28-event lifecycle, exit-code-2 blocking, the RCE history, and the patterns worth shipping.
+description: "Claude Code hooks guide: all 28 lifecycle events, exit code 2 blocking, PreToolUse examples, the stop_hook_active trap, and the patterns worth shipping."
 date: 2026-05-26
 image: /content/images/2026/05/claude-code-hooks-complete-guide.png
 authors:
@@ -27,7 +27,7 @@ Hooks are the actual home-security system. Some are locks that refuse to open (a
 
 The official reference puts it plainly: hooks are "user-defined shell commands, HTTP endpoints, or LLM prompts that execute automatically at specific points in Claude Code's lifecycle."[^2] They sit *outside* the model. The model can't talk its way past them, and neither can a subagent (your gates apply recursively to every child context too).
 
-Claude Code has six extension layers, and they're easy to confuse. CLAUDE.md is advisory context the model reads. Slash commands and skills are procedural knowledge somebody invokes. Subagents are isolated child contexts that return summaries. MCP servers hand the model new tools. Plugins bundle all of that for distribution. Hooks are the only layer that's deterministic by construction.
+Claude Code has six extension layers, and they're easy to confuse. CLAUDE.md is advisory context the model reads. Slash commands and [skills](/blog/every-knob-in-a-claude-code-skill-md/) are procedural knowledge somebody invokes. Subagents are isolated child contexts that return summaries. MCP servers hand the model new tools. Plugins bundle all of that for distribution. Hooks are the only layer that's deterministic by construction.
 
 ## When Do Hooks Actually Fire? The 28-Event Lifecycle
 
@@ -198,7 +198,51 @@ The interesting patterns go further. A `SessionStart` hook that prints `git stat
 
 The most impressive production story is Spotify's "Honk." They've merged more than 1,500 pull requests through a `Stop`-hook verification loop, and roughly half of all PRs pushed at Spotify since mid-2024 ran through this approach.[^7] The deliberate design choice is the lesson: the agent doesn't know how verification works. It just gets pass/fail feedback and keeps going until it passes. The guarantee lives in the hook, not in the model's good intentions.
 
-If you want a reference implementation to crib from, Anthropic ships `examples/hooks/bash_command_validator_example.py` in the `anthropics/claude-code` repo, which validates Bash commands and rewrites `grep` calls to `rg`.[^8] The community repo `disler/claude-code-hooks-mastery` demonstrates every event with single-file Python scripts and is the most-referenced starting point.[^9]
+If you want a reference implementation to crib from, Anthropic ships `examples/hooks/bash_command_validator_example.py` in the `anthropics/claude-code` repo, which validates Bash commands and rewrites `grep` calls to `rg`.[^8] The community repo `disler/claude-code-hooks-mastery` is the most-referenced starting point, with caveats you should read before copying it.[^9]
+
+## Is disler/claude-code-hooks-mastery Worth Cloning?
+
+Search for Claude Code hook examples and you'll land on `disler/claude-code-hooks-mastery`. It's the most-starred hooks repo on GitHub (about 3,900 stars as of October 2026), and as a learning tool it earns them. As a source of production guards, it doesn't. I read every hook script in it, and the gap between those two verdicts deserves its own section.
+
+### What it gets right
+
+Every hook is a single-file Python script run through `uv`, with its dependencies declared inline (PEP 723). That's the best idea in the repo, and I'd steal it:
+
+```python
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["python-dotenv"]
+# ///
+```
+
+Hooks get real libraries without touching your project's virtualenv, and nobody has to remember a `pip install`. Warm startup came in around 50 ms when I timed it, comfortably inside the 200 ms budget. (The cold start downloads dependencies, so the very first run needs network.)
+
+The second thing worth copying is hooks scoped to a subagent's frontmatter. The repo's `team/builder.md` agent runs `ruff` and `ty` on every `Write|Edit`, but only while that agent is working, and it returns a proper `{"decision": "block", "reason": ...}` so lint errors flow straight back to the model. A `Stop` hook declared there becomes `SubagentStop` automatically. Skills get the same trick through their own `hooks:` field.
+
+And as a payload tour, it's excellent. It wires 13 events with match-all matchers and dumps every stdin payload to `logs/<event>.json`. Run it for a day and you'll know the real shape of `agent_transcript_path`, `source`, and `trigger` better than the docs will teach you.
+
+### Where it'll bite you
+
+This is where the camera-versus-lock distinction stops being theoretical. The repo's headline "self-validating" Stop gate for `/plan_w_team` is supposed to keep Claude working until a spec file exists with the right headings. Here's how its validator reports a failure:
+
+```python
+result = {"result": "block", "reason": message}
+print(json.dumps(result))
+sys.exit(1)  # exit 1 never blocks, and "result" isn't a real field
+```
+
+Two separate bugs. `result` isn't a hook output field (the right one is `decision`), and even the right field would be ignored, because JSON is only parsed on exit 0 and exit 1 is a non-blocking error. The gate never fires. It's the security engineer's `exit 1` demo, sitting in the repo most people copy from.
+
+The rest is smaller, but it adds up:
+
+- `stop_hook_active` is read and thrown away in both `stop.py` and `subagent_stop.py`. Harmless while nothing blocks. The moment you "fix" the validator to exit 2, you inherit the infinite loop.
+- The security guards fail open. Every script ends in `except Exception: sys.exit(0)`, so a crash in the `rm` guard (a `uv` resolution failure counts) lets the command through. Fine for a logger, wrong for a lock.
+- The denylists are regex whack-a-mole. `rm -r build` and `find . -delete` pass, `rm -r foo.txt` gets blocked, and `source .env` walks right past the `.env` guard. Issue #4 shows Opus routing around the `rm` block by writing a shell script and running that instead.[^10]
+- Paths resolve against the current directory instead of `$CLAUDE_PROJECT_DIR`, so logs scatter and helper scripts break the moment Claude runs `cd` (issue #3; the fix PR is still unmerged).[^11]
+- It's frozen at mid-2025 semantics. `main` hasn't moved since February 2026, the README still documents the legacy `approve|block` PreToolUse fields, and it covers 13 events of a lifecycle that has grown well past that. There's no LICENSE file either, so "cribbing" from it is technically all rights reserved.
+
+My verdict: clone it into a scratch project to learn the payloads, and copy the `uv` header and the frontmatter-scoped validators. Don't copy its guards. Anything that's supposed to be a lock should return `permissionDecision: "deny"`, gate on `stop_hook_active`, and fail closed.
 
 ## A Word on Performance
 
@@ -225,3 +269,5 @@ The contractor has the keys either way. The only question is whether you wired t
 [^7]: https://engineering.atspotify.com/2025/11/honk-agentic-verification-loops
 [^8]: https://github.com/anthropics/claude-code/blob/main/examples/hooks/bash_command_validator_example.py
 [^9]: https://github.com/disler/claude-code-hooks-mastery
+[^10]: https://github.com/disler/claude-code-hooks-mastery/issues/4
+[^11]: https://github.com/disler/claude-code-hooks-mastery/issues/3

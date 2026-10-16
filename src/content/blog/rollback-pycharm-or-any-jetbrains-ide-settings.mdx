@@ -1,6 +1,6 @@
 ---
 title: Rollback PyCharm (or any JetBrains IDE) settings
-description: I frequently use PyCharm, and today my settings were overwritten with outdated data from another computer via cloud sync. Here's how to rollback your IDE settings to a specific day and time.
+description: "Rollback PyCharm or any JetBrains IDE settings after a bad cloud sync: find the settingsSync Git history and restore your settings to a specific date."
 date: 2024-12-11
 authors:
   - jack-klimov
@@ -11,24 +11,90 @@ tags:
 featured: false
 ---
 
-I frequently use PyCharm, and today my settings were overwritten with outdated data from another computer via cloud sync. 🙀 My theme and shortcuts were messed up and broken. Honestly, I had been concerned about this happening since I enabled cloud sync between all JetBrain IDEs. I couldn't find much information on how to resolve this issue, so I decided to write a short note on how to rollback your IDE settings to a specific day and time if you encounter the same problem.
+I use PyCharm every day, and today my settings were overwritten with outdated data from another computer via cloud sync. 🙀 My theme and shortcuts were messed up and broken. Honestly, I'd been worried about exactly this since I enabled cloud sync between all my JetBrains IDEs. I couldn't find much on how to fix it, so I wrote this note on how to roll your IDE settings back to a specific day and time if it happens to you.
 
-**Where is the settings history stored?**
+The short version: your settings have a flight recorder, and it's a Git repo.
 
-Good news are that ALL changes to your settings within any JetBrains IDE are stored under Git in the `settingsSync` folder.
+## Where Is the JetBrains Settings History Stored?
 
-For macOS: `~/Library/Application Support/JetBrains/<product><version>/settingsSync`
-For Linux: `~/.config/JetBrains/<product><version>/settingsSync`
-For Windows: `%APPDATA%\JetBrains\<product><version>\settingsSync`
+The good news is that every change to your settings within any JetBrains IDE is committed to Git, in a `settingsSync` folder inside the IDE's config directory:
 
-For example, in my case, `settingsSync` folder for PyCharm was located at `~/Library/Application Support/JetBrains/**PyCharm2024.3**/settingsSync`
+- macOS: `~/Library/Application Support/JetBrains/<product><version>/settingsSync`
+- Linux: `~/.config/JetBrains/<product><version>/settingsSync`
+- Windows: `%APPDATA%\JetBrains\<product><version>\settingsSync`
 
-If you want to see what has been synced and who to blame, you can use the `git log` and `git diff` commands in this folder.
+In my case, the `settingsSync` folder for PyCharm was at `~/Library/Application Support/JetBrains/PyCharm2024.3/settingsSync`. Each major version (2024.3, 2025.1, and so on) has its own config directory, so each one keeps its own recorder too.
 
-**There is also a tool panel in the IDE**
+## What Does Backup and Sync Actually Sync?
 
-The IDE has a special UI to manage sync history. You can find it under `View -> Tool Windows -> Backup and Sync History`
+More than you'd guess. In the Backup and Sync dialog you pick categories: UI settings (theme, editor font, toolbars, notifications), keymaps, code settings (code style, file types, live templates), plugins, tools like version control and the debugger, and system settings.[^1] Plugins are odd: a plugin missing on one machine gets installed there, but uninstalling one elsewhere only disables it.
 
-Or simply open it via "Search Action" to get there quickly.
+You also choose the scope: this product's instances only, or every JetBrains IDE (plus Android Studio). Then sync runs on its own, each time you change a setting and each time the server receives an update from another IDE.[^1] That second trigger is the one that bit me. An old laptop wakes up and pushes its stale state. Your main machine dutifully applies it.
 
-Here, you can view the entire history and roll back to a specific change immediately.
+## How Do You Roll Back From the Backup and Sync History Tool Window?
+
+The IDE has a dedicated UI for this. Open `View -> Tool Windows -> Backup and Sync History`, or just type “Backup and Sync History” into Search Action (double Shift) to get there quickly.
+
+It lists every change, split into local and remote, with a diff for each entry. Two actions matter. **Reset to this State** puts your settings back as they were at the selected change, while Undo This Change reverts just that entry. Neither is destructive. The tooltip promises every change stays in the history, so a bad reset can itself be reset.
+
+Under the hood, a reset checks out the files from that commit and records a new commit tagged `restores: <hash>`.[^2] For most people this is the whole fix. Once you know where the window is, it's a two-minute job.
+
+## How Do You Roll Back JetBrains Settings From the Command Line?
+
+The tool window tells you *what* changed. Git tells you *who*, which you need to stop it happening again: every commit body records the producing machine's app ID (marked `[this]` or `[other]`), build, user, host, and OS.[^2]
+
+Close the IDE first. JetBrains warns that a running IDE can overwrite files in the config directory on shutdown.[^3] Then take a backup before touching anything:
+
+```bash
+cd ~/Library/Application\ Support/JetBrains/PyCharm2024.3
+cp -R . ~/pycharm2024.3-config-backup     # cheap insurance, do it every time
+
+cd settingsSync
+git log --date=iso master | less          # look for the host you don't recognize
+git log --oneline --since="2024-12-10" -- options/ keymaps/
+git diff --stat <good-hash> master        # which files the bad sync touched
+```
+
+A commit from the stale machine looks roughly like this (values changed):
+
+```text
+id:       [other] 3f2a...
+appName:  PyCharm 2024.3
+user:     jack
+host:     old-macbook.local
+os:       macOS
+```
+
+To restore, read files out of the good commit straight into the config directory. I don't rewrite history or commit inside `settingsSync` by hand. The IDE keeps three branches there (`master`, `ide`, and `cloud`) in step, and I'd rather not learn what it does when they disagree.
+
+```bash
+# theme lives in options/laf.xml, the active keymap in options/keymap.xml
+git show <good-hash>:options/laf.xml    > ../options/laf.xml
+git show <good-hash>:options/keymap.xml > ../options/keymap.xml
+git archive <good-hash> keymaps | tar -x -C ..   # custom keymaps, if you have any
+```
+
+Here's the catch. If sync is still on, the next remote update can stomp your restored files. So disable Backup and Sync on that machine first, restore, check the result, then re-enable it and choose **Push Settings to Account** so your state becomes the shared one. Given the choice, I'd use the tool window's reset and keep Git for forensics.
+
+## How Do You Stop Bad Settings From Re-Syncing?
+
+Find the machine named in the `host:` line. Deal with it before it wakes up again. On that machine, open Settings (Cmd+, on macOS, Ctrl+Alt+S elsewhere), go to Backup and Sync, and either disable it or uncheck the categories it shouldn't own. If you want to keep it in the loop, re-enable sync there and pick **Get Settings from Account**, so it pulls the good state instead of pushing its old one.
+
+If PyCharm and IntelliJ IDEA keep fighting over your theme, set the scope to “PyCharm instances only.” And careful in the disable dialog: the option to remove data from your JetBrains account wipes the cloud copy for every machine.[^1]
+
+## What If You Never Turned On Backup and Sync?
+
+Then there's no `settingsSync` history, and you're down to the older tools. `File -> Manage IDE Settings -> Export Settings` writes a ZIP of the settings you choose, and `Import Settings` brings it back.[^1] Export one before any risky experiment. It's thirty seconds of work.
+
+`File -> Manage IDE Settings -> Restore Default Settings` backs up your current config to a sibling folder named `<product><version>-backup` before resetting. To get back from there, point `Import Settings` at that backup directory.[^4]
+
+Last resort: after a major upgrade, the previous version's config directory usually stays on disk next to the new one. `PyCharm2024.2` won't have your latest tweaks, but it's a known-good snapshot from before the mess.
+
+My take after all this: leave sync on, but treat any machine you haven't opened in a month as hostile until it has pulled from the account. Which of your machines is the stale one right now?
+
+## References
+
+[^1]: https://www.jetbrains.com/help/pycharm/sharing-your-ide-settings.html
+[^2]: https://github.com/JetBrains/intellij-community/blob/master/platform/settings-sync-core/src/com/intellij/settingsSync/core/GitSettingsLog.kt
+[^3]: https://www.jetbrains.com/help/pycharm/directories-used-by-the-ide-to-store-settings-caches-plugins-and-logs.html
+[^4]: https://www.jetbrains.com/help/idea/configuring-project-and-ide-settings.html

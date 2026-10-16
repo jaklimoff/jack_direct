@@ -1,6 +1,6 @@
 ---
 title: "Every Knob in a Claude Code SKILL.md: The Hidden Frontmatter Reference"
-description: A senior engineer's guide to all 18 Claude Code SKILL.md frontmatter fields, the context fork pair, body templating, and the bugs you'll hit.
+description: "Claude Code SKILL.md frontmatter reference: all 18 fields, the context: fork and agent pair, body templating, and the bugs you'll hit in practice."
 date: 2026-04-26
 image: /content/images/2026/04/every-knob-in-a-claude-code-skill-md.png
 authors:
@@ -104,7 +104,7 @@ Two real caveats. Forks only make sense for skills with explicit instructions, n
 
 ### The two lifecycle knobs
 
-`hooks:` accepts the same `PreToolUse`, `PostToolUse`, `Stop` shape as global hooks, with two skill-specific behaviors worth knowing. Hook entries support `once: true` for single-fire-per-invocation, a feature subagents lack. And `Stop` automatically becomes `SubagentStop` when the skill runs forked.
+`hooks:` accepts the same `PreToolUse`, `PostToolUse`, `Stop` shape as [global hooks](/blog/claude-code-hooks-complete-guide/), with two skill-specific behaviors worth knowing. Hook entries support `once: true` for single-fire-per-invocation, a feature subagents lack. And `Stop` automatically becomes `SubagentStop` when the skill runs forked.
 
 `shell: bash` (default) or `shell: powershell` controls the shell used for the inline `!` injection syntax in the body. PowerShell also needs `CLAUDE_CODE_USE_POWERSHELL_TOOL=1` set in the environment.
 

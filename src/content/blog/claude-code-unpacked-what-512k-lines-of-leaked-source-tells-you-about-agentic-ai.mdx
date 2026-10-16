@@ -1,14 +1,14 @@
 ---
 title: "Claude Code Unpacked: What 512k Lines of Leaked Source Tells You About Agentic AI"
-description: "Discover what ccunpacked.dev reveals about Claude Code's agent loop, hidden features, and Anthropic's unreleased roadmap - straight from 512k lines of leaked source."
+description: "Claude Code source leak, unpacked: what 512k lines reveal about the agent loop, 40+ built-in tools, 44 hidden feature flags, and Anthropic's roadmap."
 date: 2026-04-02
 image: /content/images/2026/04/claude-code-unpacked-what-512k-lines-of-leaked-source-tells-you-about-agentic-ai.png
 authors:
   - jack-klimov
 tags:
+  - claude-code
   - ai
   - agents
-  - claude
 ---
 
 A misconfigured `.npmignore`, a 59.8 MB source map, and 512,000 lines of readable TypeScript - here's what Claude Code's leaked source reveals about how production agentic AI actually gets built.
@@ -82,7 +82,7 @@ The flag list reads like a product roadmap that forgot to ship:
 
 Anthropic made a specific, opinionated bet: **a single-threaded master loop with one level of sub-agent depth, deterministic tool guards, and explicit planning artifacts beats a multi-agent swarm in production.** The debuggability argument is real. When something goes wrong in an unconstrained multi-agent system, your observability stack is doing archaeology. With a flat message history and a single main thread, you can replay every decision.
 
-The four-layer tool permission system is the same principle. Three cheap deterministic checks gate the expensive AI classifier. Your mean time to recovery (MTTR) on a misbehaving agent drops dramatically when the failure modes are enumerated upfront rather than emergent.
+The four-layer tool permission system is the same principle. Three cheap deterministic checks gate the expensive AI classifier. You can bolt your own deterministic layer onto it with [hooks](/blog/claude-code-hooks-complete-guide/), which see every tool call before the permission prompt does. Your mean time to recovery (MTTR) on a misbehaving agent drops dramatically when the failure modes are enumerated upfront rather than emergent.
 
 The hidden features - KAIROS, Coordinator Mode, AGENT_TRIGGERS - show where the architecture is clearly heading: Sovereign AI workflows that run continuously, not on-demand. Background agents with webhooks and cron schedules. Orchestrators managing worker fleets. This is not speculative. The code is compiled, sitting behind a flag.[^2]
 

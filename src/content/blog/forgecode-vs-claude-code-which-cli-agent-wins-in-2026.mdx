@@ -1,11 +1,12 @@
 ---
 title: "ForgeCode vs Claude Code: Which CLI Agent Wins in 2026?"
-description: "Learn how ForgeCode's Rust-based runtime beats Claude Code on benchmarks but trails on ecosystem. A senior engineer's honest take on choosing between them."
+description: "ForgeCode vs Claude Code: ForgeCode scores 81.8% on TermBench 2.0 to Claude Code's 58%, but trails on ecosystem. Which CLI agent to pick in 2026."
 date: 2026-04-03
 image: /content/images/2026/04/claudecode_vs_forgecode.png
 authors:
   - jack-klimov
 tags:
+  - claude-code
   - ai
   - agents
   - cli
@@ -53,13 +54,13 @@ Claude Code's prompt caching is particularly clever. Every user running the same
 
 Auto-compaction solves context window pressure by summarizing earlier conversation turns, preserving the cache prefix while freeing up token budget. If you've ever watched an agent degrade mid-session because it ran out of context, you know this matters.
 
-The MCP ecosystem is the real moat. Connect Claude Code to Linear, Notion, Google Drive, Sentry, your internal APIs, or any of hundreds of community-built servers. ForgeCode supports MCP as a protocol, but the sheer volume of ready-made integrations tilts heavily toward Claude Code's side.
+The MCP ecosystem is the real moat. Connect Claude Code to Linear, Notion, Google Drive, Sentry, your internal APIs, or any of hundreds of community-built servers. ForgeCode supports MCP as a protocol, but the sheer volume of ready-made integrations tilts heavily toward Claude Code's side. Add [skills](/blog/every-knob-in-a-claude-code-skill-md/) for packaged workflows and hooks for hard guardrails, and the extension surface is hard to match.
 
 ## What Are the Pain Points With Claude Code?
 
 Two words: **permission fatigue.**
 
-Claude Code runs on a permission-based model. By default, it's read-only and asks before every write, every bash command, every MCP tool call. Anthropic's own engineering blog admits the problem: "after the tenth approval, you're not really reviewing anymore. You're just clicking through." They report that sandboxing reduces permission prompts by 84%, but the base experience still annoys power users.[^8][^9]
+Claude Code runs on a permission-based model. By default, it's read-only and asks before every write, every bash command, every MCP tool call. Anthropic's own engineering blog admits the problem: "after the tenth approval, you're not really reviewing anymore. You're just clicking through." They report that sandboxing reduces permission prompts by 84%, but the base experience still annoys power users.[^8][^9] The fix most people miss: a `PreToolUse` hook that returns `allow` for commands you already trust ([how hook decisions work](/blog/claude-code-hooks-complete-guide/)).
 
 Rate limits are the other friction point. Claude Code enforces a dual-layer usage framework: a five-hour rolling window for burst control and a seven-day weekly ceiling for total compute. Teams report scheduling coding sessions around reset cycles just to ensure quota availability. That's operational overhead that shouldn't exist.[^10]
 

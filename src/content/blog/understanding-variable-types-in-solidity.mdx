@@ -1,6 +1,6 @@
 ---
 title: Understanding Variable Types in Solidity
-description: Variables function as foundational elements in smart contracts. This guide explores the different variable types available in Solidity with practical examples.
+description: "Solidity variable types explained: value vs reference types, storage, memory, and calldata, constant vs immutable, slot packing, and pragma versions."
 date: 2024-06-23
 image: /content/images/2024/06/variable-types-solidity.jpg
 authors:
@@ -10,128 +10,221 @@ tags:
   - ethereum
 ---
 
-## Introduction
+Most Solidity bugs I've seen in code review weren't clever reentrancy attacks. They were type bugs. A struct copied into `memory` and edited, then silently thrown away. A mapping someone assumed they could loop over.
 
-Variables function as foundational elements in smart contracts, encompassing numerous categories with distinct characteristics. This guide explores the different variable types available in Solidity with practical examples demonstrating real-world applications.
+Solidity's type system is small. But every type is tied to where its data lives, and on the EVM that decides what it costs. Here are the variable types in Solidity 0.8.x (0.8.37 is current as of September 2026), sharp edges marked, with compiler pinning at the end.
 
-## Booleans
+## How Should You Think About Solidity Variable Types?
 
-Straightforward and effective, boolean values can be either `true` or `false`. These constants frequently appear in conditional logic that directs smart contract execution.
+Treat a contract like a warehouse. **Storage** is the shelving, divided into 32-byte slots, and every write to it costs real gas. **Memory** is the workbench, wiped clean when the call ends. **Calldata** is the delivery crate that arrives with the transaction. You can read what's inside; you can't repack it.
 
-**Operators:** `!` (logical negation), `&&` (logical conjunction), `||` (logical disjunction), `==` (equality), `!=` (inequality)
+Value types are small parts you carry in your pocket. Pass one along and the receiver gets a copy. Reference types (arrays, structs, mappings, `bytes`, and `string`) are pallets. Solidity makes you say where each one sits.
+
+## What Are the Value Types in Solidity?
+
+### Booleans and integers
+
+`bool` holds `true` or `false` and supports `!`, `&&`, `||`, `==`, and `!=`. The logical operators short-circuit, which matters when the right-hand side is an expensive call.
+
+Integers run from `uint8` to `uint256` and `int8` to `int256` in steps of 8 bits; `uint` and `int` mean the 256-bit versions. Since 0.8.0 arithmetic is checked by default, so an overflow reverts with `Panic(0x11)` instead of silently wrapping like it did in 0.7. Want the gas back? Use `unchecked`, but only where you've proved the math is safe.
 
 ```solidity
-bool hasVoted;
+function sum(uint256[] calldata xs) external pure returns (uint256 total) {
+    for (uint256 i; i < xs.length; ++i) {
+        total += xs[i];             // checked: reverts on overflow
+    }
+}
 
-function vote() public {
-    require(!hasVoted, "You have already voted.");
-    hasVoted = true;
-    // Proceed with voting logic
+function wrap() external pure returns (uint8) {
+    uint8 x = 255;
+    unchecked { return x + 1; }     // 0, old-school wraparound, on purpose
 }
 ```
 
-## Integers
+You'll still see `unchecked { ++i; }` in loops everywhere. Mostly habit. Since 0.8.22 the compiler drops the check on a simple counter like the one above by itself.[^3] And division by zero panics even inside `unchecked`.
 
-Both signed (`int`) and unsigned (`uint`) integer types exist in sizes ranging from `int8`/`uint8` to `int256`/`uint256`.
+### address and address payable
 
-**Operators:**
-- Comparisons: `<=`, `<`, `==`, `!=`, `>=`, `>`
-- Bitwise: `&`, `|`, `^`, `~`
-- Shift: `<<`, `>>`
-- Arithmetic: `+`, `-`, `*`, `/`, `%`, `**`
+`address` holds 20 bytes. `address payable` adds the `transfer` and `send` members. Since 0.8.0 `msg.sender` is a plain `address`, so you convert with `payable(...)` when needed.
+
+My take: don't write `transfer` or `send` in new code. Both forward a hard-coded 2,300 gas stipend that breaks smart contract wallets, and 0.8.31 (December 2025) deprecated both ahead of removal in 0.9.0.[^4] Use `call`.
 
 ```solidity
-uint256 public totalFunds;
-uint256 public fundingGoal = 100 ether;
+address public owner;
+address payable public treasury;
 
-function contribute() public payable {
-    totalFunds += msg.value;
-    require(totalFunds <= fundingGoal, "Funding goal reached.");
+constructor(address payable _treasury) {
+    owner = msg.sender;            // plain `address` since 0.8.0
+    treasury = _treasury;
+}
+
+function sweep() external {
+    require(msg.sender == owner, "not owner");
+    (bool ok, ) = treasury.call{value: address(this).balance}("");
+    require(ok, "sweep failed");   // the bool is the whole point, check it
 }
 ```
 
-## Fixed Point Numbers
+`call` with a value compiles on a plain `address` too, so these days the payable type is mostly a statement of intent.
 
-While not yet completely integrated, fixed-point types (`fixed` and `ufixed`) represent decimal values with predetermined precision — critical for financial calculations.
+### bytes1 to bytes32 and enums
 
-```solidity
-// Placeholder example as fixed point numbers are not fully supported
-ufixed128x18 exchangeRate = 1.2345;
-```
+`bytes1` through `bytes32` are fixed-size value types. `bytes32`, the workhorse for hashes and role IDs, fills exactly one slot.
 
-## Address
-
-The `address` type stores a 20-byte Ethereum address. Two variants exist: standard `address` and `address payable`, where the latter accepts Ether transfers.
+Enums are named integers capped at 256 members, so they always fit in a `uint8` (which is also how they show up in the ABI). Their default is the first member. Converting an out-of-range integer reverts with `Panic(0x21)`.
 
 ```solidity
-address payable public owner;
+enum Status { None, Pending, Shipped, Cancelled }
 
-constructor() {
-    owner = payable(msg.sender);
-}
+Status public status;              // starts as Status.None
 
-function buyTokens() public payable {
-    owner.transfer(msg.value);
+function setRaw(uint8 raw) external {
+    status = Status(raw);          // raw = 7 reverts, the compiler range-checks this
 }
 ```
 
-## Enums
+Put a `None` member first. Otherwise “never touched” and “pending” look identical.
 
-Enumerations define sets of named constants, serving well for representing limited option sets like contract states.
+### Fixed point: declared, not usable
+
+`fixed` and `ufixed` (say, `ufixed128x18`) still aren't implemented. The docs are blunt: they can be declared, but not assigned to or from.[^1] Assign one, or even mark it `public`, and 0.8.37 fails with `UnimplementedFeatureError`. Real contracts use scaled integers, usually 18 decimals.
 
 ```solidity
-enum ShipmentStatus { Pending, Shipped, Delivered, Cancelled }
-ShipmentStatus public status;
+ufixed128x18 rate;                 // compiles, as long as nothing touches it
 
-function updateStatus(ShipmentStatus _status) public {
-    status = _status;
+uint256 constant WAD = 1e18;       // 1.0 in 18-decimal fixed point
+function mulWad(uint256 x, uint256 y) internal pure returns (uint256) {
+    return x * y / WAD;            // multiply first, divide last
 }
 ```
 
-## Structs
+## What Are Reference Types in Solidity?
 
-Custom composite types group multiple variables together, facilitating organization of intricate data arrangements.
+### Arrays, bytes, and string
+
+Arrays are fixed (`uint256[3]`) or dynamic (`address[]`). Only dynamic storage arrays and `bytes` have `push()` and `pop()`; memory arrays get their length from `new` and never grow. Nested notation reads backwards from C: `uint256[][5]` is five dynamic arrays.
+
+`string` is `bytes` without length or index access. You get the length through `bytes(s).length`, and that's a byte count, not a character count (an “é” in UTF-8 is 2 bytes). There's no `==` for strings either.
 
 ```solidity
-struct Property {
-    string location;
-    uint256 price;
-    address owner;
-}
-
-Property public property;
-
-function setProperty(string memory _location, uint256 _price, address _owner) public {
-    property = Property(_location, _price, _owner);
+function sameName(string calldata a, string calldata b) external pure returns (bool) {
+    return keccak256(bytes(a)) == keccak256(bytes(b));
 }
 ```
 
-## Arrays
+Prefer `bytes` to `bytes1[]`, which pads every element to 32 bytes in memory.
 
-Both fixed-length and dynamic arrays store collections of identical-type values.
+### Structs and mappings
+
+Structs group fields into a custom type. Mappings are the strange shelf in the warehouse: you find a box by hashing its label, and nobody keeps an inventory list. Only the key's `keccak256` hash is used, the key itself is never stored, and every possible key “exists” and returns zero.[^1]
+
+That explains every mapping restriction. No length, no iteration. Mappings live only in storage, as does any struct or array containing one, and they can't cross a public function boundary. Need to walk the keys? Keep the list yourself (OpenZeppelin's `EnumerableSet` packages this up):
 
 ```solidity
-address[] public participants;
+mapping(address user => uint256 amount) public balances;  // named keys since 0.8.18
+mapping(address => bool) private isHolder;
+address[] public holders;
 
-function enterLottery() public {
-    participants.push(msg.sender);
+function credit(address user, uint256 amount) internal {
+    if (!isHolder[user]) {
+        isHolder[user] = true;
+        holders.push(user);        // the inventory list the mapping won't keep
+    }
+    balances[user] += amount;
 }
 ```
 
-## Mappings
+Just don't loop over an unbounded `holders` in a state-changing function. That's a gas-limit DoS waiting for its first popular week.
 
-Key-value storage structures enable rapid data retrieval, functioning similarly to hash tables.
+## Storage, Memory, or Calldata: Which Data Location Do You Need?
+
+Reference-type parameters and locals need an explicit location. The copy rules are where people get hurt. Storage to memory (or anything from calldata) always makes an independent copy, while memory to memory, or storage to a local `storage` variable, only copies a reference.[^2] Calldata is read-only and the cheapest choice for external parameters you won't modify.
+
+Here's the bug I see most often:
 
 ```solidity
-mapping(address => uint256) public balances;
+struct Order { address buyer; uint96 qty; bool filled; }
+mapping(uint256 => Order) public orders;
 
-function transfer(address _to, uint256 _amount) public {
-    require(balances[msg.sender] >= _amount, "Insufficient balance.");
-    balances[msg.sender] -= _amount;
-    balances[_to] += _amount;
+function fillBroken(uint256 id) external {
+    Order memory o = orders[id];   // copies the box onto the workbench
+    o.filled = true;               // edits the copy, gone when the call returns
+}
+
+function fill(uint256 id) external {
+    Order storage o = orders[id];  // points at the shelf itself
+    o.filled = true;               // persisted
 }
 ```
 
-## Conclusion
+`fillBroken` compiles. It reads fine line by line, which is exactly why it survives review. The only hint is a compiler warning that its mutability “can be restricted to view,” because it never writes anything. Treat that warning as an error.
 
-Mastering diverse variable types is essential for developing performant and secure smart contracts. Each category excels in particular scenarios — from booleans for access control to mappings for efficient data retrieval.
+## What Default Values Do Solidity Variables Get?
+
+There's no `null` and no `undefined`. Every variable starts as all-zero bytes: `false`, `0`, `address(0)`, a zeroed `bytes32`, the first enum member, empty arrays and strings, and structs with every field zeroed. `delete x` resets a variable to that same default. On a whole mapping it won't even compile, and deleting a struct leaves any mapping inside it untouched.
+
+So a mapping can't tell “never set” from “set to zero.” If that distinction matters, store it: a flag, a non-zero sentinel, or a `None` enum member.
+
+## When Should You Use constant vs immutable?
+
+Both keep a value out of storage, which skips the 2,100 gas cold `SLOAD` (EIP-2929) on every read. `constant` must be known at compile time and works for value types and strings. `immutable` is set during construction, works only for value types, and gets written into the deployed bytecode. Since 0.8.21 you can assign immutables anywhere in the constructor, including inside branches.
+
+```solidity
+uint256 public constant MAX_SUPPLY = 10_000;
+bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+address public immutable factory;  // known only at deploy time
+
+constructor(address _factory) {
+    factory = _factory;
+}
+```
+
+Each immutable reserves a full 32 bytes of code, even for a `bool`.
+
+## How Does Storage Slot Packing Save Gas?
+
+Storage slots are 32 bytes. Consecutive state variables smaller than that share a slot when they fit, in declaration order. Structs and arrays always start a fresh slot, and so does whatever comes after them.
+
+```solidity
+contract Loose {
+    uint128 a;   // slot 0
+    uint256 b;   // slot 1, doesn't fit next to a
+    uint128 c;   // slot 2
+}
+
+contract Packed {
+    uint128 a;   // slot 0
+    uint128 c;   // slot 0, second half
+    uint256 b;   // slot 1
+}
+```
+
+Writing a zero slot to non-zero costs 20,000 gas, so a saved slot is real money. That's why the `Order` struct pairs `address` (20 bytes) with `uint96` (12 bytes). Don't overdo it. A lone `uint8` costs extra masking operations compared with a `uint256`, because the EVM works in 32-byte words. Check the result with `solc --storage-layout`.
+
+## How Do You Pin the Solidity Compiler Version With Pragma?
+
+`pragma solidity` doesn't select a compiler. It makes compilation fail when the compiler running isn't in the range you allowed.[^5] The syntax follows npm's semver rules, which gives you six forms (pick one per file):
+
+```solidity
+pragma solidity 0.8.37;            // exact: only 0.8.37
+pragma solidity >=0.8.20 <0.9.0;   // comparison range
+pragma solidity 0.8.20 - 0.8.37;   // hyphen range, both ends inclusive
+pragma solidity 0.8.x;             // x-range: >=0.8.0 <0.9.0 (0.8.* works too)
+pragma solidity ~0.8.20;           // tilde: >=0.8.20 <0.9.0
+pragma solidity ^0.8.20;           // caret: >=0.8.20 <0.9.0
+```
+
+The caret keeps the left-most non-zero component fixed. On 0.x that's the minor, so `^0.8.20` means `>=0.8.20 <0.9.0` and will refuse the coming 0.9.0 breaking release. For a full 0.8.x version, tilde and caret accept exactly the same compilers. One gotcha: `pragma solidity 0.8;` isn't an exact pin. A partial version acts as an x-range.
+
+My recommendation is simple. Libraries that other people compile with their own toolchain should use a caret floor (`^0.8.20`, the oldest version whose features you need). Contracts you deploy should pin an exact version, `pragma solidity 0.8.37;`, matching `foundry.toml` or your Hardhat config. Audited bytecode should come from one known compiler, since compiler bugs are tracked per version, and a floating pragma is a standard audit finding (SWC-103).[^6] Pinning also pins the default EVM target. 0.8.20 started emitting `PUSH0`, which broke deploys on chains without Shanghai.
+
+So, a next step: open your largest contract, run `solc --storage-layout` on it, and count the slots. Then grep for `memory` on any struct you read out of a mapping. One of those two checks usually finds something.
+
+## References
+
+[^1]: https://docs.soliditylang.org/en/latest/types.html
+[^2]: https://docs.soliditylang.org/en/latest/types.html#data-location-and-assignment-behavior
+[^3]: https://soliditylang.org/blog/2023/10/25/solidity-0.8.22-release-announcement
+[^4]: https://forum.soliditylang.org/t/solidity-v0-8-31-is-out/3649
+[^5]: https://docs.soliditylang.org/en/latest/layout-of-source-files.html#version-pragma
+[^6]: https://swcregistry.io/docs/SWC-103
