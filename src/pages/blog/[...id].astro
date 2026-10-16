@@ -2,6 +2,7 @@
 import Link from '@/components/Link.astro'
 import PostHead from '@/components/PostHead.astro'
 import PostNavigation from '@/components/PostNavigation.astro'
+import RelatedPosts from '@/components/RelatedPosts.astro'
 import SubpostsHeader from '@/components/SubpostsHeader.astro'
 import SubpostsSidebar from '@/components/SubpostsSidebar.astro'
 import TOCHeader from '@/components/TOCHeader.astro'
@@ -155,7 +156,7 @@ try {
                     />
                     {author.isRegistered ? (
                       <Link
-                        href={`/authors/${author.id}`}
+                        href={`/authors/${author.id}/`}
                         underline
                         class="text-foreground"
                       >
@@ -211,7 +212,7 @@ try {
                 return (
                   <div class="group relative">
                     <a
-                      href={`/tags/${tag}`}
+                      href={`/tags/${tag}/`}
                       class={`${badgeVariants({ variant })} ${className || ''}`}
                     >
                       <Icon name="lucide:hash" class="size-3" />
@@ -257,6 +258,8 @@ try {
         />
       )
     }
+
+    {!isCurrentSubpost && <RelatedPosts postId={currentPostId} />}
 
     <PostNavigation
       newerPost={navigation.newer}

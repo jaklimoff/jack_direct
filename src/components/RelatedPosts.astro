@@ -1,0 +1,28 @@
+---
+import BlogCard from '@/components/BlogCard.astro'
+import { getRelatedPosts } from '@/lib/data-utils'
+
+interface Props {
+  postId: string
+}
+
+const { postId } = Astro.props
+const relatedPosts = await getRelatedPosts(postId, 3)
+---
+
+{
+  relatedPosts.length > 0 && (
+    <section class="col-start-2 flex flex-col gap-y-2" aria-labelledby="related-posts">
+      <h2 id="related-posts" class="text-xl font-medium">
+        Related posts
+      </h2>
+      <ul class="flex flex-col">
+        {relatedPosts.map((post) => (
+          <li>
+            <BlogCard entry={post} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}

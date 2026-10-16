@@ -105,6 +105,30 @@ export async function getPostsByTag(
   return posts.filter((post) => post.data.tags?.includes(tag))
 }
 
+export async function getRelatedPosts(
+  postId: string,
+  count: number,
+): Promise<CollectionEntry<'blog'>[]> {
+  const posts = await getAllPosts()
+  const current = posts.find((post) => post.id === postId)
+  const tags = new Set(current?.data.tags ?? [])
+
+  // Rank by shared tags, newest first on ties; unrelated posts fill any gap
+  return posts
+    .filter((post) => post.id !== postId)
+    .map((post) => ({
+      post,
+      shared: (post.data.tags ?? []).filter((tag) => tags.has(tag)).length,
+    }))
+    .sort(
+      (a, b) =>
+        b.shared - a.shared ||
+        b.post.data.date.valueOf() - a.post.data.date.valueOf(),
+    )
+    .slice(0, count)
+    .map(({ post }) => post)
+}
+
 export async function getRecentPosts(
   count: number,
 ): Promise<CollectionEntry<'blog'>[]> {

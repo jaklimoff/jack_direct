@@ -38,11 +38,19 @@ const legacyRedirects: Record<string, string> = {
   '/author/jaklimoff': '/about/',
   '/page/2': '/blog/2/',
   '/page/3': '/blog/2/',
+  // Thin pragma post merged into the variable types guide
+  '/mastering-solidity-pragma-6-ways-to-specify-compiler-versions':
+    '/blog/understanding-variable-types-in-solidity/#how-do-you-pin-the-solidity-compiler-version-with-pragma',
+  '/blog/mastering-solidity-pragma-6-ways-to-specify-compiler-versions':
+    '/blog/understanding-variable-types-in-solidity/#how-do-you-pin-the-solidity-compiler-version-with-pragma',
 }
 
 const redirectPaths = new Set(
   Object.keys(legacyRedirects).map((path) => `https://jack.direct${path}/`),
 )
+
+// Tag and author pages are noindex, so they stay out of the sitemap too
+const noindexSections = ['https://jack.direct/tags/', 'https://jack.direct/authors/']
 
 export default defineConfig({
   site: 'https://jack.direct',
@@ -94,7 +102,11 @@ export default defineConfig({
     }),
     mdx(),
     react(),
-    sitemap({ filter: (page) => !redirectPaths.has(page) }),
+    sitemap({
+      filter: (page) =>
+        !redirectPaths.has(page) &&
+        !noindexSections.some((section) => page.startsWith(section)),
+    }),
     icon(),
   ],
   vite: {
