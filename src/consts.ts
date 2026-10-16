@@ -3,7 +3,7 @@ import type { IconMap, SocialLink, Site } from '@/types'
 export const SITE: Site = {
   title: 'Jack Klimov',
   description:
-    'Engineering leader driving AI adoption and building resilient distributed systems. I write about the intersection of technology and leadership, from architecting scalable platforms to navigating the human side of engineering teams.',
+    'Software architect Jack Klimov on putting AI agents to work in engineering teams: agentic coding, distributed systems, and the teams that ship them.',
   href: 'https://jack.direct',
   author: 'jack-klimov',
   locale: 'en-US',
