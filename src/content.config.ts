@@ -7,6 +7,8 @@ const blog = defineCollection({
     title: z.string(),
     description: z.string(),
     date: z.coerce.date(),
+    // Set when a post gets a meaningful content update (not typo fixes)
+    updated: z.coerce.date().optional(),
     order: z.number().optional(),
     image: z.string().optional(),
     tags: z.array(z.string()).optional(),

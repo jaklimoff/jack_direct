@@ -1,46 +1,30 @@
 ---
 import PageHead from '@/components/PageHead.astro'
 import Layout from '@/layouts/Layout.astro'
-import { SITE } from '@/consts'
+import { ABOUT_URL, WEBSITE_ID, getPersonSchema } from '@/lib/schema'
 
-// Article Schema for About page
-const articleSchema = {
-  "@context": "https://schema.org",
-  "@type": "Article",
-  "publisher": {
-    "@type": "Organization",
-    "name": SITE.title,
-    "url": SITE.href,
-    "logo": {
-      "@type": "ImageObject",
-      "url": `${SITE.href}/content/images/2024/06/avatar-1.png`,
-      "width": 60,
-      "height": 60
-    }
-  },
-  "author": {
-    "@type": "Person",
-    "name": SITE.title,
-    "image": {
-      "@type": "ImageObject",
-      "url": `${SITE.href}/content/images/2024/06/avatar-2.png`,
-      "width": 700,
-      "height": 700
+const description =
+  'Jack Klimov is a software architect and former founder and CTO with 15+ years in distributed systems, now putting AI agents to work in engineering teams.'
+
+const profileSchema = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'ProfilePage',
+      '@id': ABOUT_URL,
+      url: ABOUT_URL,
+      name: 'About Jack Klimov',
+      description,
+      isPartOf: { '@id': WEBSITE_ID },
+      mainEntity: await getPersonSchema(),
     },
-    "url": `${SITE.href}/author/jack/`
-  },
-  "headline": "About this site",
-  "url": `${SITE.href}/about/`,
-  "datePublished": "2024-06-21T10:28:16.000Z",
-  "dateModified": "2024-06-21T10:57:02.000Z",
-  "description": "Jack Klimov is an independent publication launched in June 2024 by Jack Klimov."
+  ],
 }
 ---
-<Layout class="max-w-3xl">
+<Layout class="max-w-3xl" title="About Jack Klimov" description={description}>
   <PageHead slot="head" title="About" />
   
-  <!-- Article Schema for About page SEO -->
-  <script is:inline type="application/ld+json" set:html={JSON.stringify(articleSchema)} />
+  <script is:inline type="application/ld+json" set:html={JSON.stringify(profileSchema)} />
 
   <article class="py-8">
     <h1 class="text-4xl font-bold mb-8">About</h1>

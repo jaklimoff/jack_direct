@@ -1,7 +1,16 @@
 ---
 import { SITE } from '@/consts'
-import { isSubpost } from '@/lib/data-utils'
-import type { CollectionEntry } from 'astro:content'
+import { isSubpost, parseAuthors } from '@/lib/data-utils'
+import { getImageInfo } from '@/lib/images'
+import {
+  ABOUT_URL,
+  PERSON_ID,
+  WEBSITE_ID,
+  getPersonSchema,
+  personRef,
+  twitterHandle,
+} from '@/lib/schema'
+import { getEntry, type CollectionEntry } from 'astro:content'
 
 interface Props {
   post: CollectionEntry<'blog'>
@@ -11,54 +20,54 @@ const { post } = Astro.props
 
 const title = post.data.title || SITE.title
 const description = post.data.description || SITE.description
-const image = new URL('/static/1200x630.png', Astro.site)
-const author =
-  post.data.authors && post.data.authors.length > 0
-    ? post.data.authors.join(', ')
-    : SITE.author
-
 const postUrl = new URL(Astro.url.pathname, Astro.site).href
 
-// Handle image - string URL path
-const imageSrc = post?.data?.image
-const postImage = imageSrc 
-  ? (imageSrc.startsWith('http') ? imageSrc : `${SITE.href}${imageSrc}`)
-  : image.href
-const publishedTime = post.data.date?.toISOString() || new Date().toISOString()
-// Use published time as modified time if no updatedDate field exists
-const modifiedTime = publishedTime
+const authors = await parseAuthors(
+  post.data.authors?.length ? post.data.authors : [SITE.author],
+)
+const authorNames = authors.map((author) => author.name)
+const siteAuthor = await getEntry('authors', SITE.author)
+const creator = twitterHandle(siteAuthor?.data.twitter)
 
-// Article Schema for better SEO and AI/GEO optimization
+// Same image the page uses for og:image (see Head.astro)
+const imageSrc = post.data.image ?? `/og/blog/${post.id}.png`
+const imageInfo = getImageInfo(imageSrc)
+const imageUrl = new URL(imageSrc, Astro.site).href
+
+const publishedTime = post.data.date.toISOString()
+const modifiedTime = (post.data.updated ?? post.data.date).toISOString()
+
+const person = await getPersonSchema()
+
 const articleSchema = {
-  "@context": "https://schema.org",
-  "@type": "BlogPosting",
-  "headline": title,
-  "description": description,
-  "image": postImage,
-  "datePublished": publishedTime,
-  "dateModified": modifiedTime,
-  "author": {
-    "@type": "Person",
-    "name": author,
-    "url": SITE.href
-  },
-  "publisher": {
-    "@type": "Organization",
-    "name": SITE.title,
-    "url": SITE.href,
-    "logo": {
-      "@type": "ImageObject",
-      "url": new URL('/static/logo.png', Astro.site).href
-    }
-  },
-  "mainEntityOfPage": {
-    "@type": "WebPage",
-    "@id": postUrl
-  },
-  "url": postUrl,
-  ...(post.data.tags && post.data.tags.length > 0 && {
-    "keywords": post.data.tags.join(", ")
-  })
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'BlogPosting',
+      '@id': `${postUrl}#article`,
+      headline: title,
+      description,
+      image: {
+        '@type': 'ImageObject',
+        url: imageUrl,
+        ...(imageInfo && { width: imageInfo.width, height: imageInfo.height }),
+      },
+      datePublished: publishedTime,
+      dateModified: modifiedTime,
+      author: authors.map((author) =>
+        author.id === SITE.author
+          ? personRef(author.name)
+          : { '@type': 'Person', name: author.name },
+      ),
+      publisher: { '@id': PERSON_ID },
+      isPartOf: { '@id': WEBSITE_ID },
+      mainEntityOfPage: { '@type': 'WebPage', '@id': postUrl },
+      url: postUrl,
+      inLanguage: SITE.locale,
+      ...(post.data.tags?.length && { keywords: post.data.tags.join(', ') }),
+    },
+    person,
+  ],
 }
 ---
 
@@ -68,19 +77,24 @@ const articleSchema = {
 {isSubpost(post.id) && <meta name="robots" content="noindex" />}
 
 <!-- Article-specific Open Graph tags -->
-<meta property="og:locale" content={SITE.locale} />
+<meta property="og:locale" content={SITE.locale.replace('-', '_')} />
 <meta property="og:site_name" content={SITE.title} />
 <meta property="article:published_time" content={publishedTime} />
 <meta property="article:modified_time" content={modifiedTime} />
-<meta property="article:author" content={author} />
+<meta property="article:author" content={ABOUT_URL} />
+<meta name="author" content={authorNames.join(', ')} />
 {
-  post?.data.tags &&
-    post.data.tags.map((tag: string) => {
-      return <meta property="article:tag" content={tag} />
-    })
+  post.data.tags?.map((tag: string) => (
+    <meta property="article:tag" content={tag} />
+  ))
 }
 
-<meta name="twitter:creator" content={author} />
+{creator && <meta name="twitter:creator" content={creator} />}
+{creator && <meta name="twitter:site" content={creator} />}
 
 <!-- Article Schema Markup for AI/GEO and Rich Snippets -->
-<script is:inline type="application/ld+json" set:html={JSON.stringify(articleSchema)} />
+<script
+  is:inline
+  type="application/ld+json"
+  set:html={JSON.stringify(articleSchema)}
+/>

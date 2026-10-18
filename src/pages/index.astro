@@ -6,6 +6,7 @@ import Timeline from '@/components/Timeline.astro'
 import { SITE, SOCIAL_LINKS } from '@/consts'
 import Layout from '@/layouts/Layout.astro'
 import { getAllPosts, getPostReadingTime } from '@/lib/data-utils'
+import { getPersonSchema, websiteSchema } from '@/lib/schema'
 import { getPostTopic, shortReadTime } from '@/lib/topics'
 
 const allPosts = await getAllPosts()
@@ -33,31 +34,9 @@ const orbit = [
 const heroDescription =
   'Putting AI agents to work in engineering teams: agentic coding, distributed systems, and the teams that ship them.'
 
-const personSchema = {
+const homeSchema = {
   '@context': 'https://schema.org',
-  '@type': 'Person',
-  name: SITE.title,
-  url: SITE.href,
-  description: SITE.description,
-}
-
-const websiteSchema = {
-  '@context': 'https://schema.org',
-  '@type': 'WebSite',
-  name: SITE.title,
-  url: SITE.href,
-  description: SITE.description,
-  publisher: {
-    '@type': 'Organization',
-    name: SITE.title,
-    url: SITE.href,
-    logo: {
-      '@type': 'ImageObject',
-      url: `${SITE.href}/content/images/2024/06/avatar-1.png`,
-      width: 60,
-      height: 60,
-    },
-  },
+  '@graph': [await getPersonSchema(), websiteSchema()],
 }
 ---
 
@@ -67,12 +46,7 @@ const websiteSchema = {
   <script
     is:inline
     type="application/ld+json"
-    set:html={JSON.stringify(personSchema)}
-  />
-  <script
-    is:inline
-    type="application/ld+json"
-    set:html={JSON.stringify(websiteSchema)}
+    set:html={JSON.stringify(homeSchema)}
   />
 
   <!-- Hero -->
@@ -150,7 +124,7 @@ const websiteSchema = {
             <span class="orbit-satellite-dot"></span>
           </span>
           <img
-            src="/content/images/2024/06/avatar-1.png"
+            src="/avatar-256.webp"
             alt={SITE.title}
             width="112"
             height="112"

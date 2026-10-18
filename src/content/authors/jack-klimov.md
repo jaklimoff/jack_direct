@@ -1,6 +1,6 @@
 ---
 name: Jack Klimov
-avatar: /avatar.png
+avatar: /avatar-256.webp
 bio: Tech enthusiast sharing insights on code and management
 github: https://github.com/jaklimoff
 twitter: https://x.com/jaklimoff

@@ -14,6 +14,7 @@ import rehypeKatex from 'rehype-katex'
 import rehypePrettyCode from 'rehype-pretty-code'
 import remarkEmoji from 'remark-emoji'
 import remarkMath from 'remark-math'
+import { rehypeOptimizedImages } from './src/lib/rehype-optimized-images'
 
 import { pluginCollapsibleSections } from '@expressive-code/plugin-collapsible-sections'
 import { pluginLineNumbers } from '@expressive-code/plugin-line-numbers'
@@ -34,9 +35,26 @@ const devAllowedHosts = (
   .map((host) => host.trim())
   .filter(Boolean)
 
-const blogSlugs = readdirSync(new URL('./src/content/blog', import.meta.url))
+const blogDir = new URL('./src/content/blog/', import.meta.url)
+const blogSlugs = readdirSync(blogDir)
   .filter((file) => file.endsWith('.mdx'))
   .map((file) => file.replace(/\.mdx$/, ''))
+
+// Sitemap lastmod per post: `updated` when set, else the publish date
+const frontmatterDate = (text: string, key: string) => {
+  const value = text.match(new RegExp(`^${key}:\\s*['"]?([0-9T:.Z+-]+)`, 'm'))?.[1]
+  return value ? new Date(value) : undefined
+}
+const postLastmod = new Map(
+  blogSlugs.map((slug) => {
+    const text = readFileSync(new URL(`${slug}.mdx`, blogDir), 'utf8')
+    const date = frontmatterDate(text, 'updated') ?? frontmatterDate(text, 'date')
+    return [`https://jack.direct/blog/${slug}/`, date]
+  }),
+)
+const newestPost = new Date(
+  Math.max(...[...postLastmod.values()].map((date) => date?.getTime() ?? 0)),
+)
 
 // Legacy Ghost URLs: posts lived at the site root, plus a few renamed slugs
 const legacyRedirects: Record<string, string> = {
@@ -120,6 +138,13 @@ export default defineConfig({
       filter: (page) =>
         !redirectPaths.has(page) &&
         !noindexSections.some((section) => page.startsWith(section)),
+      serialize: (item) => {
+        const listing =
+          item.url === 'https://jack.direct/' ||
+          item.url === 'https://jack.direct/blog/'
+        const lastmod = listing ? newestPost : postLastmod.get(item.url)
+        return lastmod ? { ...item, lastmod: lastmod.toISOString() } : item
+      },
     }),
     icon(),
   ],
@@ -143,9 +168,10 @@ export default defineConfig({
         rehypeExternalLinks,
         {
           target: '_blank',
-          rel: ['nofollow', 'noreferrer', 'noopener'],
+          rel: ['noreferrer', 'noopener'],
         },
       ],
+      rehypeOptimizedImages,
       rehypeHeadingIds,
       rehypeKatex,
       [

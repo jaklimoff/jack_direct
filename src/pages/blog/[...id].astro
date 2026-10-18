@@ -11,6 +11,7 @@ import TOCSidebar from '@/components/TOCSidebar.astro'
 import { Button } from '@/components/ui/button'
 import Layout from '@/layouts/Layout.astro'
 import { getCover } from '@/lib/covers'
+import { getImageInfo } from '@/lib/images'
 import {
   getAdjacentPosts,
   getAllPostsAndSubposts,
@@ -68,6 +69,7 @@ try {
 const isCurrentSubpost = isSubpost(currentPostId)
 const topic = getPostTopic(post)
 const hasCover = !!getCover(currentPostId)
+const coverImage = getImageInfo(post.data.image)
 
 // Error handling for navigation and metadata
 let navigation: Awaited<ReturnType<typeof getAdjacentPosts>> = {
@@ -190,6 +192,19 @@ try {
         <time datetime={post.data.date.toISOString()}>
           {formatDate(post.data.date)}
         </time>
+        {
+          post.data.updated && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>
+                updated{' '}
+                <time datetime={post.data.updated.toISOString()}>
+                  {formatDate(post.data.updated)}
+                </time>
+              </span>
+            </>
+          )
+        }
         <span aria-hidden="true">·</span>
         <span>
           {postReadingTime}
@@ -220,13 +235,19 @@ try {
               {hasCover ? (
                 <Cover id={currentPostId} bare ratio={2.4} />
               ) : (
-                <img
-                  src={post.data.image}
-                  alt=""
-                  width={1200}
-                  height={630}
-                  class="block aspect-[2/1] h-auto w-full object-cover"
-                />
+                <picture>
+                  {coverImage && (
+                    <source srcset={coverImage.webp} type="image/webp" />
+                  )}
+                  <img
+                    src={post.data.image}
+                    alt={post.data.title}
+                    width={coverImage?.width ?? 1200}
+                    height={coverImage?.height ?? 630}
+                    fetchpriority="high"
+                    class="block aspect-[2/1] h-auto w-full object-cover"
+                  />
+                </picture>
               )}
             </div>
           </div>

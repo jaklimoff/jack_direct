@@ -2,6 +2,7 @@
 import { SITE, ANALYTICS, UMAMI } from '@/consts'
 import { ClientRouter } from 'astro:transitions'
 import Favicons from './Favicons.astro'
+import { getImageInfo } from '@/lib/images'
 
 interface Props {
   title?: string
@@ -31,6 +32,10 @@ const ogImage =
     ogRoutes.has(cleanPathname) ? `/og${cleanPathname}.png` : '/og-default.png',
     Astro.site,
   ).href
+// Generated /og/* images and og-default.png are 1200x630
+const ogImageSize = image
+  ? getImageInfo(image)
+  : { width: 1200, height: 630 }
 ---
 
 <head>
@@ -71,10 +76,10 @@ const ogImage =
   })()}
   <meta property="og:image" content={ogImage} />
   <meta property="og:image:alt" content={title} />
-  {!image && (
+  {ogImageSize && (
     <>
-      <meta property="og:image:width" content="1200" />
-      <meta property="og:image:height" content="630" />
+      <meta property="og:image:width" content={String(ogImageSize.width)} />
+      <meta property="og:image:height" content={String(ogImageSize.height)} />
     </>
   )}
 

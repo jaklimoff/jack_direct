@@ -15,7 +15,7 @@
   "scripts": {
     "dev": "astro dev",
     "start": "astro dev",
-    "build": "astro check && astro build",
+    "build": "node scripts/optimize-images.mjs && astro check && astro build",
     "preview": "astro preview --port 4321",
     "astro": "astro",
     "prettier": "prettier --write **/*.{ts,tsx,css,astro} --ignore-path .gitignore",
@@ -25,7 +25,8 @@
     "test:e2e:debug": "playwright test --debug",
     "new-post": "npx tsx scripts/new-post.ts",
     "covers": "node scripts/render-covers.mjs",
-    "favicons": "node scripts/render-favicons.mjs"
+    "favicons": "node scripts/render-favicons.mjs",
+    "images": "node scripts/optimize-images.mjs"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.5",
