@@ -154,9 +154,9 @@ export const COVERS: Record<string, CoverSpec> = {
       edges: [
         { from: 0, to: 2, label: 'CP · Spanner', hot: true },
         { from: 1, to: 2, label: 'AP · Dynamo', hot: true },
-        { from: 0, to: 1 },
+        { from: 0, to: 1, label: 'CA · 1 node' },
       ],
-      caption: 'Cassandra: tunable per operation',
+      caption: 'Choose per operation, not per database',
     },
   },
 

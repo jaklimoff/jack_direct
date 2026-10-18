@@ -1,7 +1,8 @@
 ---
-title: "CAP Theorem for Developers: Trade-offs and Real Examples"
-description: "CAP theorem for developers: what consistency, availability, and partition tolerance mean in practice, with Dynamo, Spanner, and Cassandra examples."
+title: "CAP Theorem for Developers: What It Says and Why PACELC Matters More"
+description: "CAP theorem for developers: what a network partition forces you to choose, why CA isn't an option, how Spanner, DynamoDB, and Cassandra behave, and PACELC."
 date: 2024-07-02
+updated: 2026-10-18
 image: /content/images/covers/cap-theorem-for-developers.png
 authors:
   - jack-klimov
@@ -12,157 +13,166 @@ tags:
 featured: true
 ---
 
-## Introduction to CAP Theorem
+On October 21, 2018, GitHub lost the link between its US East Coast network hub and its main East Coast data center for 43 seconds. That was enough. Orchestrator, the tool that manages GitHub's MySQL topology, promoted new primaries on the West Coast, while a short window of writes had already landed on the East Coast primaries and never left. Each side now held writes the other didn't have, and GitHub spent 24 hours and 11 minutes in degraded service stitching them back together, because it chose "to prioritize data integrity over site usability and time to recovery."[^1]
 
-Picture yourself as an architect, tasked with designing a sprawling digital metropolis. Your city isn't built from concrete and steel, but from interconnected servers and data centers. As you sketch out your plans, you realize you're facing a fundamental challenge that has puzzled computer scientists for decades: how to create a system that's both rock-solid reliable and lightning-fast responsive, even when parts of it go dark.
+That's the CAP theorem with the theory peeled off. When the network splits a distributed system, every node that can still hear requests has to pick: answer and risk being wrong, or refuse and stay right. This post covers what that choice is, what it isn't, and the other trade-off that costs you far more often: the one you make when the network is fine.
 
-This is where the CAP theorem steps onto the stage, like a wise mentor offering guidance in your digital urban planning. Coined by Eric Brewer in 2000, the CAP theorem is a concept that's as central to distributed systems as gravity is to physics. It's a principle that whispers in the ear of every developer working on large-scale applications, reminding them of the inherent trade-offs they'll face.
+## What Does the CAP Theorem Actually Say?
 
-At its heart, the CAP theorem tells us a bittersweet truth: in a distributed system, you can't have your cake and eat it too. It states that when it comes to Consistency, Availability, and Partition tolerance, you can only choose two out of these three desirable properties at any given time.
+Eric Brewer stated it as a conjecture in his PODC keynote in July 2000.[^2] Seth Gilbert and Nancy Lynch proved it in 2002, and ten years later they restated it in one sentence: "In a network subject to communication failures, it is impossible for any web service to implement an atomic read/write shared memory that guarantees a response to every request."[^3]
 
-Think of these properties as the three pillars of an ideal distributed system:
+Each letter in that sentence has a narrow meaning, and most CAP arguments are people using different ones.
 
-* **Consistency (C)**: Every read receives the most recent write or an error
-* **Availability (A)**: Every request receives a response, without guarantee that it contains the most recent version of the information
-* **Partition Tolerance (P)**: The system continues to operate despite arbitrary partitioning due to network failures.
+**Consistency** means linearizability. Every read sees the most recent completed write, as if there were exactly one copy of the data. It's not the C in ACID, which is about invariants inside a transaction. **Availability** means every request that reaches a non-failing node gets a non-error response, with no deadline attached. **Partition tolerance** means the system keeps its promises even when the network drops any number of messages between nodes.
 
-As we peel back the layers of the CAP theorem, we'll see how these pillars interact, conflict, and compromise. We'll explore why you might choose consistency over availability in some cases, or vice versa. And we'll grapple with the reality that in a world where networks can fail, partition tolerance isn't so much a choice as a necessity.
+Here's the picture I'll use for the rest of the post. A bank has two branches and one joint account with 500 in it. The branches keep separate ledgers and phone each other before every withdrawal, so both ledgers always agree. Then a backhoe cuts the phone line. Alice walks into branch A and asks for 400. At the same moment Bob walks into branch B and asks for 400. Each teller has exactly two moves: refuse (that's C) or pay (that's A). Waiting for the line to come back counts as refusing, just slowly.
 
-## The Three Components: Consistency, Availability, and Partition Tolerance
+## Can a System Be CA?
 
-Let's take a closer look at the three pillars of the CAP theorem, imagining them as the vital organs of our distributed system's body. Each component plays a crucial role, and understanding their nature helps us to see the inherent trade-offs we face with them.
+No, not if it runs on more than one machine. You don't get to opt out of partitions, because the network decides when they happen, not you. Partition tolerance isn't a feature you pick; it's the weather.
 
-### Consistency: The System's Memory
+The "pick two of three" slogan is what makes CA sound like a real option. Brewer himself wrote in 2012 that the "2 of 3" formulation "was always misleading because it tended to oversimplify the tensions among properties."[^4] A single Postgres box looks CA only because there's no network inside it to fail. Add one replica and you're back at the bank, with a phone line that can be cut.
 
-Picture consistency as the system's ability to tell a coherent and truthful story. When we talk about consistency in distributed systems, we're referring to all nodes seeing the same data at the same time. It's like having a group of friends who always have the exact same information, no matter who you ask or when you ask them.
+My admitted failure: the first version of this post listed CA as a valid design choice, for systems "in a small, reliable network." That's the exact misreading Brewer spent his 2012 paper correcting. It also told you that Spanner stays consistent during partitions thanks to atomic clocks, which is half right and makes the wrong half sound like magic.
 
-In practice, this means that after an update is made to the system, all subsequent read operations will return that updated value. If you can't guarantee this, you might need to return an error rather than potentially outdated information.
+### What About Spanner, Which Claims to Be Both?
 
-Consider a banking app. When you make a transfer, consistency ensures that your new balance is reflected accurately across all parts of the system. Without it, you might see different balances depending on which server you connect to – a recipe for confusion and potential financial chaos.
+Brewer wrote a whole paper about this in February 2017, by then working at Google.[^5] His answer: Spanner is "technically a CP system." When a partition cuts a Paxos group's leader off from its quorum, writes to that group stall, so the minority side loses availability. What Spanner earns is the label "effectively CA," because its measured availability is better than five 9s and network problems caused under 8% of its incidents.
 
-### Availability: The System's Responsiveness
+The interesting part is why. Brewer says TrueTime "does not significantly help achieve CA." What helps is that every Spanner packet travels over Google's private network, and each data center typically has at least three independent fibers into it. The clocks buy consistent snapshots and external consistency. The availability comes from owning the cables, which isn't advice most of us can follow.
 
-Availability is like the system's heartbeat – it keeps things alive and responsive. An available system promises to respond to every request, be it a read or a write operation. It doesn't guarantee that the response will contain the most up-to-date information, but it does assure that you'll get a response, not an error.
+So CA is a probability claim, not a design. In Brewer's 2012 words, "choosing CA should mean that the probability of a partition is far less than that of other systemic failures."[^4] Unless you run your own fiber, assume the backhoe exists.
 
-Imagine a social media platform during a major event. Millions of users are posting updates simultaneously. An available system will ensure that users can continue to post and view content, even if some of the information isn't immediately consistent across the entire network.
+## What Do the Tellers Do When the Line Goes Dead?
 
-### Partition Tolerance: The System's Resilience
+Let's write the bank down. This is a toy (Python 3, no dependencies), but it runs, and the output below is real.
 
-Partition tolerance is the system's immune system, allowing it to continue functioning even when communication breaks down between its parts. In a distributed system, network failures are not just possible; they're inevitable. Partition tolerance is the ability to handle these failures gracefully.
+```python
+def withdraw(self, account, amount):
+    if self.line_up:
+        if amount > self.balance[account]:
+            raise ValueError("insufficient funds")
+        self.balance[account] -= amount
+        self.peer.balance[account] -= amount   # synchronous: both ledgers or neither
+        return amount
+    if self.mode == "CP":
+        raise Unavailable("can't reach the other branch, come back later")
+    if self.mode == "BOUNDED":
+        paid = sum(a for acc, a in self.pending if acc == account)
+        if paid + amount > self.limit:          # limit = 200 per branch
+            raise Unavailable(f"offline limit is {self.limit}")
+    self.balance[account] -= amount            # AP: pay now, reconcile later
+    self.pending.append((account, amount))
+    return amount
+```
 
-Think of a global e-commerce platform with data centers across continents. If the transatlantic cable is damaged, partition tolerance ensures that European customers can still shop, even if they can't see real-time updates from American inventory for a while.
+Cut the line, send Alice to branch A and Bob to branch B, have each ask for 400 and settle for 200, then reconnect and replay the pending withdrawals on both sides:
 
-### The Interplay and Trade-offs
+```text
+CP       Alice refused 400: can't reach the other branch, come back later
+CP       Bob refused 400: can't reach the other branch, come back later
+CP       balance after the line comes back: 500
+AP       Alice gets 400
+AP       Bob gets 400
+AP       balance after the line comes back: -300
+BOUNDED  Alice refused 400: offline limit is 200
+BOUNDED  Alice gets 200
+BOUNDED  Bob refused 400: offline limit is 200
+BOUNDED  Bob gets 200
+BOUNDED  balance after the line comes back: 100
+```
 
-Here's where things get interesting – and challenging. In a perfect world, we'd have all three of these properties working in harmony. But the CAP theorem tells us this isn't possible in a distributed system.
+(I trimmed the CP retries at 200, which fail the same way.) The CP branches keep the books perfect and serve nobody. The AP branches serve everybody and leave the bank chasing 300 it doesn't have.
 
-* If we prioritize consistency and availability, we sacrifice partition tolerance. This might work in a small, reliable network, but it's not feasible for most real-world distributed systems.
-* If we choose consistency and partition tolerance, we might have to reduce availability. During a network partition, the system might refuse requests to prevent inconsistent data.
-* If we opt for availability and partition tolerance, we accept that our data might not always be consistent. This is often the choice for systems that prioritize user experience over absolute data accuracy.
+The third mode is the useful one, and it comes straight from Brewer's 2012 paper. ATMs really work this way: during a partition they keep dispensing cash, but only up to some limit k, "where k might be $200." The invariant (balance never below zero) holds as long as the limit times the number of branches stays under the balance, and whatever slips through gets fixed afterward with compensation, like an overdraft fee. Brewer's recipe has three steps: detect the partition, enter an explicit partition mode that limits some operations, and run recovery when the line comes back.[^4]
 
-## Understanding Trade-offs in Distributed Systems
+That's the part the "pick two" slogan hides. You don't choose C or A once, for the whole database. You choose per operation, and you can choose something in between.
 
-In the world of distributed systems, making choices between consistency, availability, and partition tolerance is like walking a tightrope. Each decision tilts the balance, affecting how our system behaves under different conditions.
+## Is DynamoDB an AP Database?
 
-### The CP Approach: When Accuracy is King
+Mostly no, and the confusion comes from the name. The 2007 Dynamo paper describes an internal Amazon store built for the shopping cart, where "an 'Add to Cart' operation can never be forgotten or rejected."[^6] Dynamo used sloppy quorums, hinted handoff, and vector clocks, and it merged conflicting carts on read. The paper admits the cost in one line: "deleted items can resurface." Its common setting was N=3 replicas, R=2, W=2. That's AP thinking all the way down.
 
-Systems that prioritize consistency and partition tolerance (CP) are like precision instruments. They ensure that all nodes have the same data, even if it means some requests might be denied during network partitions.
+DynamoDB, the AWS service launched in 2012, is a different system. Its 2022 paper says the team combined Dynamo's scalability with SimpleDB's consistency.[^7] Each partition is a replication group spread across Availability Zones, run by Multi-Paxos, and "only the leader replica can serve write and strongly consistent read requests." Eventually consistent reads can come from any replica. Cut the leader off and writes for that partition wait for a new one: that's the CP side of the counter.
 
-Database systems often lean towards this approach. For instance, when you're checking your bank balance, you'd rather see an error message than an incorrect amount. In these cases, the system might choose to become temporarily unavailable to avoid serving stale or inconsistent data.
+Inside one Region you choose per read. Across Regions, AWS turned the CAP choice into a flag you set once:
 
-### The AP Strategy: Keeping the Show Running
+```python
+import boto3
 
-On the other hand, systems that favor availability and partition tolerance (AP) are like the show-must-go-on performers of the tech world. They ensure the system keeps responding, even if the data might not be the latest across all nodes.
+ddb = boto3.client("dynamodb", region_name="us-east-2")
 
-Think of a social media feed. If there's a network partition, you might not see the very latest posts from your friends, but the app continues to function, showing you older content rather than an error message.
+# eventual is the default; strong costs twice the read capacity
+ddb.get_item(TableName="accounts", Key={"id": {"S": "joint"}}, ConsistentRead=True)
 
-## CAP Theorem in Practice: Real-world Examples
+# MRSC: the table must be empty, and the mode can never be changed afterward
+ddb.update_table(
+    TableName="accounts",
+    ReplicaUpdates=[{"Create": {"RegionName": "us-east-1"}}],
+    GlobalTableWitnessUpdates=[{"Create": {"RegionName": "us-west-2"}}],
+    MultiRegionConsistency="STRONG",
+)
+```
 
-### Amazon's Dynamo: Embracing AP for Shopping Carts
+The default for global tables is multi-Region eventual consistency (MREC): replication is asynchronous, usually under a second, and concurrent writes to the same item are resolved by "last writer wins."[^8] Multi-Region strong consistency (MRSC) replicates every write synchronously to another Region before acknowledging it, needs exactly three Regions (or two plus a witness), and doesn't support transactions or TTL.[^9] One is the AP teller, the other is the CP teller, and AWS makes you decide at creation time. I like that. It forces the conversation before launch instead of during the incident.
 
-Let's take Amazon during an online sale. Millions of shoppers, all clicking 'Add to Cart' simultaneously. Amazon's Dynamo database, which powers their shopping cart system, is a prime example of an AP (Availability and Partition Tolerance) system.
+## How Does Cassandra Let You Tune It?
 
-Dynamo prioritizes availability, ensuring that customers can always add items to their carts, even if there's a network partition. It uses eventual consistency, meaning that while your cart might not immediately reflect changes across all nodes, it will eventually catch up.
+Cassandra descends from the Dynamo paper and keeps the per-request dial. Every write goes to all replicas; the consistency level only decides how many acknowledgments the coordinator waits for. If the replicas you write to and the replicas you read from overlap (W + R > RF), reads see acknowledged writes.[^10]
 
-### Google's Spanner: Pushing the Boundaries with CP
+```sql
+-- cqlsh, RF = 3: wait for 2 of 3 replicas on both reads and writes
+CONSISTENCY QUORUM;
+SELECT balance FROM accounts WHERE id = 'joint';
 
-Google's Spanner is a globally distributed database that aims to provide strong consistency (C) while maintaining partition tolerance (P).
+-- compare-and-set runs Paxos under the hood; keep it for the writes that can't race
+UPDATE accounts SET balance = 100 WHERE id = 'joint' IF balance = 500;
+```
 
-How does it manage this seemingly impossible feat? Through the clever use of atomic clocks and GPS timing, Spanner can synchronize transactions across the globe with remarkable precision. This allows it to maintain consistency even during network partitions.
+With RF=3 and QUORUM, the side of a partition holding one replica can't serve that key, so you've picked the CP teller. Drop to `ONE` and you get the AP teller back. The `IF` clause is a lightweight transaction, and the Cassandra docs warn it carries "a non-negligible performance cost, because Paxos is used."[^11] Even QUORUM on both sides doesn't give you full linearizability by Gilbert and Lynch's definition, as Daniel Abadi points out, but it's close enough for most data that isn't money.
 
-### Cassandra: Tunable Consistency for Flexibility
+## Why Should You Stop Calling Databases CP or AP?
 
-Apache Cassandra, used by companies like Netflix and Instagram, offers a more flexible approach. It allows developers to tune consistency levels on a per-operation basis.
+Martin Kleppmann made this case in May 2015, and it still holds.[^12] Take the most common setup in the world: one leader, asynchronous followers. Clients cut off from the leader can't write, so it isn't CAP-available. Reads from a lagging follower can be stale, so it isn't CAP-consistent either. By the strict definitions it's neither, "just P." Kleppmann shows the same for ZooKeeper's default settings.
 
-Imagine you're building a video streaming service. For user profile updates, you might choose strong consistency to ensure accurate information. But for viewing history, where occasional inconsistency is less critical, you might opt for eventual consistency to improve performance.
+There's a second problem. CAP models exactly one fault, a lost message. Nodes crash and disks fill up. A long GC pause looks exactly like a partition from the outside. Gilbert and Lynch note that a node can't tell a lost message from a slow one, so a system can serve a wrong answer "despite the lack of partitions."[^3] Every partition detector is a timeout, and every timeout is a guess.
 
-## Strategies for Designing CAP-aware Systems
+So label operations, not products. DynamoDB's eventually consistent read and its strongly consistent read hit the same table and land on opposite sides of CAP. Spanner's snapshot reads keep working on both sides of a partition while its writes stall.[^5] "Postgres is CP" tells you nothing until you know whether replication is synchronous and where the reads go (the trade-offs between [statement, WAL, logical, and trigger-based replication](/blog/understanding-replication-statement-wal-logical-log-and-trigger-based-approaches/) matter more here than the brand on the box).
 
-### 1. Know Your Requirements Inside Out
+## CAP vs PACELC: What Happens When the Network Is Fine?
 
-Before diving into the technical details, take a step back and really understand what your system needs to achieve:
+Partitions are rare. Latency happens on every request. Daniel Abadi turned that into PACELC in February 2012: "if there is a partition (P), how does the system trade off availability and consistency (A and C); else (E), when the system is running normally in the absence of partitions, how does the system trade off latency (L) and consistency (C)?"[^13]
 
-* What's the primary function of your application?
-* How critical is data consistency to your users?
-* Can your system tolerate brief periods of unavailability?
-* What's your expected scale and geographical distribution?
+Abadi's argument is that the ELC half explains more real designs than CAP does. Back to the bank on a normal day: if every withdrawal waits for a phone call to the other branch, every customer pays for that call, outage or not. Brewer does the back-of-the-envelope math for Spanner: light needs about 10 ms to cover 1,000 miles, and no clever clock beats the speed of light.[^5] Abadi's point is that Dynamo-style stores weaken consistency mostly to avoid that round trip, not because CAP forced them to.
 
-### 2. Embrace Eventual Consistency Where Appropriate
+| System | Partition (PA or PC) | Normal operation (EL or EC) |
+|---|---|---|
+| Dynamo, Cassandra, Riak (default settings) | PA | EL |
+| VoltDB/H-Store, Megastore, BigTable/HBase | PC | EC |
+| PNUTS | PC | EL |
+| Spanner | PC | EC |
+| DynamoDB global tables, MREC | PA | EL |
+| DynamoDB global tables, MRSC | PC | EC |
 
-Eventual consistency can be a powerful tool in your CAP-aware design arsenal. It allows you to prioritize availability and partition tolerance while still providing a form of consistency over time. How fast replicas catch up depends on which of the [database replication methods](/blog/understanding-replication-statement-wal-logical-log-and-trigger-based-approaches/) your database uses.
+The first three rows are Abadi's 2012 classification, and the last three follow from the Brewer paper and AWS docs cited above. PNUTS is the odd one: it gives up consistency on a normal day for speed, then gives up availability during a partition. That's a legitimate pair of choices, and CAP alone can't even describe it.
 
-### 3. Implement Multi-Version Concurrency Control (MVCC)
+## How Should You Use CAP When Designing a System?
 
-MVCC is like having a time machine for your data. It allows multiple versions of data to coexist, which can be particularly useful in distributed systems.
+Start with the operations, not the database. For each write path, ask what a node should do when it can't reach the others. Adding to a cart: answer, merge later. Debiting a balance: refuse, or bound it the way the ATM does. Incrementing a like counter: answer, and use a counter that merges cleanly instead of last-writer-wins, because LWW quietly throws away one of the two writes. That's fine for a profile picture and a disaster for money.
 
-### 4. Use Conflict Resolution Techniques
+Then write the recovery plan before you need it. GitHub's failover tooling made an availability choice (promote the West Coast) that the business didn't want when it saw the result (integrity first), and the cleanup took a day. Decide which side of a split keeps taking writes, how the other side's writes get replayed, and who gets paged to approve it. Then rehearse it: AWS Fault Injection Service can isolate a global-table Region on purpose, which beats discovering your answer at 22:52 UTC on a Sunday.[^9]
 
-In distributed systems, conflicts are inevitable. Preparing for them is key to maintaining system integrity.
+Next time someone in a design review says "we're AP," ask two things: for which operation, and what happens to the writes on the losing side? If nobody knows, your failover script will decide for you.
 
-Implement conflict resolution strategies such as:
-
-* Last-write-wins (LWW)
-* Custom merge functions
-* Vector clocks to track causality
-
-### 5. Leverage Caching Strategically
-
-Caching is like having a cheat sheet for your data. It can significantly improve availability and performance, but it needs to be managed carefully to avoid consistency issues.
-
-### 6. Implement Circuit Breakers
-
-Circuit breakers are like safety valves for your system. They can prevent cascading failures in distributed systems by failing fast and providing fallback mechanisms.
-
-### 7. Design for Failure
-
-In distributed systems, failure is not just possible – it's inevitable. Design your system with this reality in mind:
-
-* Implement retry mechanisms with exponential backoff
-* Use bulkheads to isolate failures
-* Design fallback mechanisms for critical operations
-
-## Limitations and Criticisms of CAP Theorem
-
-While the CAP theorem has been a cornerstone of distributed systems theory for over two decades, it's not without its limitations and critics.
-
-### Oversimplification of Complex Systems
-
-One of the primary criticisms of the CAP theorem is that it presents a somewhat binary view of distributed systems, which can oversimplify the nuanced reality of modern architectures.
-
-In practice, consistency and availability aren't all-or-nothing properties. There's a spectrum of consistency models (strong, eventual, causal, etc.) and various degrees of availability.
-
-### Focus on Extreme Conditions
-
-The CAP theorem primarily addresses behavior during network partitions, which, while important, are relatively rare events in many systems. Critics argue that this focus on extreme conditions may lead designers to make suboptimal choices for the more common, non-partitioned state of the system.
-
-### Neglect of Other Important System Properties
-
-By focusing solely on consistency, availability, and partition tolerance, the CAP theorem might lead designers to overlook other critical system properties. Factors like latency, throughput, and data freshness can be equally important in many scenarios.
-
-### Alternative Models and Refinements
-
-In response to these limitations, researchers and practitioners have proposed various refinements and alternative models:
-
-* **PACELC theorem**: This extends CAP by considering system behavior both during partitions (PA/EL) and in the absence of partitions (PC/EC).
-* **BASE (Basically Available, Soft state, Eventual consistency)**: This model provides an alternative to ACID for designing systems that prioritize availability.
-* The "CAP Twelve Years Later" paper by Eric Brewer himself, which revisits and clarifies some aspects of the original theorem.
+[^1]: https://github.blog/news-insights/company-news/oct21-post-incident-analysis/
+[^2]: https://people.eecs.berkeley.edu/~brewer/cs262b-2004/PODC-keynote.pdf (Brewer, "Towards Robust Distributed Systems," PODC, July 2000)
+[^3]: https://groups.csail.mit.edu/tds/papers/Gilbert/Brewer2.pdf (Gilbert and Lynch, "Perspectives on the CAP Theorem," IEEE Computer, 2012; the original proof is in ACM SIGACT News, June 2002)
+[^4]: https://www.infoq.com/articles/cap-twelve-years-later-how-the-rules-have-changed/ (Brewer, "CAP Twelve Years Later: How the 'Rules' Have Changed," IEEE Computer, February 2012)
+[^5]: https://research.google/pubs/spanner-truetime-and-the-cap-theorem/
+[^6]: https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf
+[^7]: https://www.usenix.org/conference/atc22/presentation/elhemali
+[^8]: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html
+[^9]: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/V2globaltables_HowItWorks.html
+[^10]: https://cassandra.apache.org/doc/latest/cassandra/architecture/dynamo.html
+[^11]: https://cassandra.apache.org/doc/latest/cassandra/developing/cql/dml.html
+[^12]: https://martin.kleppmann.com/2015/05/11/please-stop-calling-databases-cp-or-ap.html
+[^13]: https://www.cs.umd.edu/~abadi/papers/abadi-pacelc.pdf (Abadi, "Consistency Tradeoffs in Modern Distributed Database System Design," IEEE Computer, February 2012)
