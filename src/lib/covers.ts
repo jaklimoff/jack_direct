@@ -162,8 +162,8 @@ export const COVERS: Record<string, CoverSpec> = {
 
   'how-to-stop-your-solidity-code-from-guzzling-gas-and-eth': {
     kicker: 'Solidity',
-    short: 'Stop your Solidity code from guzzling gas',
-    stat: '5 tips',
+    short: "What saves gas, and what's folklore",
+    stat: '6 myths',
     diagram: {
       kind: 'slots',
       rows: [
