@@ -19,7 +19,18 @@ const {
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site).href
 const cleanPathname = Astro.url.pathname.replace(/\/$/, '')
-const ogImage = image || (cleanPathname ? new URL(`/og${cleanPathname}.png`, Astro.site).href : new URL('/og-default.png', Astro.site).href)
+// /og/* images exist only for content entries (see src/pages/og/[...route].ts)
+const ogRoutes = new Set(
+  Object.keys(import.meta.glob('/src/content/**/*.{md,mdx}')).map((path) =>
+    path.replace('/src/content', '').replace(/\.mdx?$/, ''),
+  ),
+)
+const ogImage =
+  image ||
+  new URL(
+    ogRoutes.has(cleanPathname) ? `/og${cleanPathname}.png` : '/og-default.png',
+    Astro.site,
+  ).href
 ---
 
 <head>
