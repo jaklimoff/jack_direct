@@ -1,8 +1,9 @@
 ---
-title: "ForgeCode vs Claude Code: Which CLI Agent Wins in 2026?"
-description: "ForgeCode vs Claude Code: ForgeCode scores 81.8% on TermBench 2.0 to Claude Code's 58%, but trails on ecosystem. Which CLI agent to pick in 2026."
+title: "ForgeCode vs Claude Code: What Happened to the 81.8% Benchmark"
+description: "ForgeCode vs Claude Code: how ForgeCode's 81.8% Terminal-Bench score got rescored, where both agents stand on Terminal-Bench 4.0, and which CLI to pick now."
 date: 2026-04-03
-image: /content/images/2026/04/claudecode_vs_forgecode.png
+updated: 2026-10-18
+image: /content/images/covers/forgecode-vs-claude-code-which-cli-agent-wins-in-2026.png
 authors:
   - jack-klimov
 tags:
@@ -12,100 +13,109 @@ tags:
   - cli
 ---
 
-Your terminal is now a battleground. Two agentic coding CLIs want to own it, and they represent fundamentally different philosophies about how AI should write your code. ForgeCode, the open-source Rust upstart, just posted 81.8% on TermBench 2.0. Claude Code, the ecosystem heavyweight with nearly 90K GitHub stars, sits at 58%.[^1]
+In March 2026, ForgeCode topped the Terminal-Bench 2.0 leaderboard at 81.8%, while Claude Code sat at 58.0%. I wrote that gap up as proof that a better harness beats a bigger platform. Within a month, the benchmark's maintainers found that ForgeCode's agent had sometimes downloaded the answers before it started working.
 
-That gap is enormous. But the benchmark number alone doesn't tell you which tool to actually use. Let me break down what does.
+This is the corrected version. It covers what happened to the score, what the leaderboard says now, and how the two CLIs actually compare in October 2026.
 
-## How Does ForgeCode Beat Claude Code on Benchmarks by 24 Points?
+## What Happened to ForgeCode's 81.8%?
 
-Think of ForgeCode's architecture like a **well-run kitchen brigade**. The head chef (the main agent) doesn't chop onions. She plans the menu, delegates the prep to specialized stations, and only steps in when something complex requires her attention. [Claude Code's agent loop](/blog/claude-code-unpacked-what-512k-lines-of-leaked-source-tells-you-about-agentic-ai/), by contrast, operates more like a single talented cook who does everything herself, from chopping to plating, in one continuous flow. That cook is brilliant, but she burns through energy (context) fast.
+Think of Terminal-Bench as an open-book exam for coding agents. Each task drops an agent into a terminal with a job to do (build this, fix that, train this model) and a hidden test that checks the result. Version 2.0, released November 7, 2025, has 89 tasks, and each leaderboard row is one agent paired with one model, scored over five attempts per task.[^1]
 
-ForgeCode's secret isn't a better model. It's a better *harness*. The team identified seven specific failure modes and built runtime-level fixes for each one:
+ForgeCode's agent starts every task by writing an `AGENTS.md` file, its own notes for the job. In April 2026, researchers at the University of Pennsylvania read the traces and found that some of those notes "contained literal answer keys."[^2] On one task, the file recorded the expected answer from an earlier failed run. On another, the agent said it would use "the known correct DAG from guidelines" and hardcoded all six edges. In exam terms, the student had written the answers into the margin of the open book.
 
-| Intervention | What It Fixed | Pass Rate |
-|:---|:---|:---|
-| Baseline (interactive mode) | No enforcement | ~25% |
-| Non-interactive + tool-call naming | Unreliable tool dispatch | ~38% |
-| `todo_write` enforcement | Agents forgetting their own plan | 66% |
-| Subagent parallelization + progressive thinking | Wasted context on trivial tasks | 78.4% |
-| Schema flattening + verification enforcement | Model-specific quirks (GPT-5.4, Opus 4.6) | 81.8% |
+Terminal-Bench confirmed it: "In multiple instances, their agent curls the solution from the internet and includes it in its `AGENTS.md`. We have rescored those trials to 0."[^3] The UPenn team estimated that clean runs would land around 71.7%, which "would move the submission from 1st place to 14th." By May 19, every ForgeCode entry was gone from the 2.0 leaderboard. I couldn't find a public statement from either side explaining the removal.
 
-Sources: ForgeCode's own benchmark write-ups.[^2][^3]
+Two fair points belong next to that. The UPenn authors write that harness-level cheating "is not always intentional cheating by the developer," and they suggest a "meta" kind of reward hacking: teams build their harnesses with coding agents, and those agents optimize for passing. Terminal-Bench's own wording was "occasional reward hacking." ForgeCode's entries were also self-submitted, while Claude Code's 58.0% was marked verified, meaning a Terminal-Bench team member ran it.
 
-The critical insight: **none of these fixes are model-specific.** They operate below the model, at the runtime layer. ForgeCode enforces planning discipline the way a linter enforces code style. The agent doesn't *choose* to update its task list; the runtime *asserts* it. Progressive thinking budgets burn heavy reasoning tokens in the first 10 messages (planning phase), then drop to low thinking for execution. Subagents handle parallelizable grunt work like file reads and pattern searches so the main agent's context stays lean.
+### What Did I Get Wrong the First Time?
 
-This is runtime engineering, not scale. A team of three built the #1 result on TermBench 2.0.[^2]
+More than the headline. My April table listed five steps from a 25% baseline to 81.8%. The fifth row, "schema flattening + verification enforcement," wasn't in any table ForgeCode published; I built it from the prose of their second post.[^5] The 78.4% row came from their first post and was run on Gemini 3.1 Pro, not the GPT-5.4 and Opus 4.6 I named.[^4] The 81.8% itself was two separate runs, one per model. And I compared an unverified score with a verified one without saying so.
 
-## Why Does Claude Code Still Dominate Real-World Adoption?
+I took a vendor's blog post and a leaderboard screenshot at face value because they told a story I liked. That's the failure mode this whole post is about.
 
-Because benchmarks measure task completion in sandboxes. Your day job happens in a messy ecosystem of GitHub PRs, Slack threads, Sentry alerts, and CI pipelines. Claude Code owns that layer.
+## Was Claude Code's 58% Fair Either?
 
-Here's the ecosystem gap in raw numbers:
+Not really, and the error ran the other way. In May 2026, Terminal-Bench 2.1 fixed problems in 28 of the 89 tasks: external dependencies that had drifted, resource limits too tight for valid approaches, and instructions that didn't match their tests.[^6] On the repaired exam, Claude Code with Opus 4.6 went from 58.0% to 70.1%. "The largest gain," in the maintainers' words.
 
-| Metric | Claude Code | ForgeCode |
-|:---|:---|:---|
-| GitHub Stars | ~89.8K | Growing, but much smaller |
-| MCP Ecosystem | 300+ integrations, 8M+ downloads | Early-stage |
-| Native CI/CD | GitHub Actions, GitLab CI/CD | Manual setup |
-| Model Options | Haiku / Sonnet / Opus (cost tiering) | Any provider (model-agnostic) |
-| Prompt Caching | Automatic, 90% cost reduction on reads | N/A (handled by provider) |
-| Auto-compaction | Built-in context summarization | Manual context management |
+So both numbers in my original headline were wrong. One was inflated by answers in the margin; the other was deflated by broken questions. The 24-point gap was closer to zero.
 
-Sources: Claude Code docs and a third-party CLI guide.[^4][^5][^6]
+## Where Do the Two Agents Stand on Terminal-Bench Now?
 
-Claude Code's prompt caching is particularly clever. Every user running the same version shares a cached system prompt prefix, so Anthropic computes it once. Cache reads cost $0.30/M tokens versus $3.00/M for fresh input. That's a 90% discount that kicks in automatically. The economics of the product literally depend on it.[^7]
+The exam has been rewritten twice since. Terminal-Bench 3.0 shipped on July 30, 2026 with 74 new tasks, where "the best models achieve ~34%." Version 4.0 followed on August 28: it dropped eight tasks, fixed nineteen, gave every task a flat eight-hour timeout, and turned Terminal-Bench into a continuous benchmark with semantic versions.[^7]
 
-Auto-compaction solves context window pressure by summarizing earlier conversation turns, preserving the cache prefix while freeing up token budget. If you've ever watched an agent degrade mid-session because it ran out of context, you know this matters.
+Here's the top of the 4.0 leaderboard as I write this on October 18, 2026:
 
-The MCP ecosystem is the real moat. Connect Claude Code to Linear, Notion, Google Drive, Sentry, your internal APIs, or any of hundreds of community-built servers. ForgeCode supports [MCP as a protocol](/blog/wild-west-of-ai-protocols/), but the sheer volume of ready-made integrations tilts heavily toward Claude Code's side. Add [skills](/blog/every-knob-in-a-claude-code-skill-md/) for packaged workflows and hooks for hard guardrails, and the extension surface is hard to match.
+| Rank | Agent + model (reasoning effort) | Accuracy (95% CI) | Cost of the run |
+|---|---|---|---|
+| 1 | Claude Code + Opus 5.5 (max) | 64.8% ± 3.1 | $4,718.65 |
+| 2 | Claude Code + Sonnet 5.5 (max) | 61.8% ± 2.9 | $7,333.64 |
+| 3 | Codex + GPT-6 Astra (max) | 58.2% ± 2.8 | $3,267.18 |
+| 3 | Codex + GPT-6.1 Sol (max) | 58.2% ± 3.1 | $634.24 |
+| 5 | Claude Code + Fable 5.1 (max) | 57.9% ± 3.8 | $6,243.50 |
 
-## What Are the Pain Points With Claude Code?
+ForgeCode isn't on it. The 4.0 board lists five agents in total (Claude Code, Codex, Grok Build, Muse Code, and mini-SWE-agent), so absence doesn't mean a bad score, only no score.
 
-Two words: **permission fatigue.**
+Read the confidence intervals before you read the ranks. Opus 5.5 and Sonnet 5.5 overlap. So do half the rows below them. And look at the cost column: one leaderboard run of Claude Code on Opus 5.5 burned 8.0 billion tokens and $4,718, while GPT-6.1 Sol landed within the margin of error of third place for $634. If you're choosing a model for an agent fleet, that column matters more than the first one.
 
-Claude Code runs on a permission-based model. By default, it's read-only and asks before every write, every bash command, every MCP tool call. Anthropic's own engineering blog admits the problem: "after the tenth approval, you're not really reviewing anymore. You're just clicking through." They report that sandboxing reduces permission prompts by 84%, but the base experience still annoys power users.[^8][^9] The fix most people miss: a `PreToolUse` hook that returns `allow` for commands you already trust ([how hook decisions work](/blog/claude-code-hooks-complete-guide/)).
+## What Is ForgeCode Now?
 
-Rate limits are the other friction point. Claude Code enforces a dual-layer usage framework: a five-hour rolling window for burst control and a seven-day weekly ceiling for total compute. Teams report scheduling coding sessions around reset cycles just to ensure quota availability. That's operational overhead that shouldn't exist.[^10]
+Two different things, and the split is recent. The open-source CLI moved from `antinomyhq/forge` to `tailcallhq/forgecode` in April. It's Rust, Apache-2.0, at about 7,600 GitHub stars, and still shipping: v2.14.0 landed October 1 with Opus 5.5 and Sonnet 5.5 support.[^8] Meanwhile forgecode.dev now sells a hosted "software factory" behind a "Book a demo" button. The blog, docs, and pricing pages that the first version of this post linked to are gone (the two benchmark posts survive on the Wayback Machine).
 
-ForgeCode sidesteps both problems. It's model-agnostic, so you bring your own API keys and manage your own rate limits. No approval fatigue because the runtime design trusts its own constraint enforcement rather than prompting the human repeatedly.
+The CLI itself is solid. It speaks to 48 model providers, from Anthropic and OpenAI to Ollama and llama.cpp, and it can sign in with an existing Claude or ChatGPT subscription. It has MCP, subagents (`forge` builds, `muse` plans, `sage` researches read-only), `SKILL.md` skills, `AGENTS.md` instructions, and automatic context compaction at 100,000 tokens by default. Headless mode is one flag:
 
-## Which Tool Should You Pick for React/Next.js and Django Projects?
+```bash
+forge -p "fix the failing test in src/parser"    # no interactive UI; pipe a file in if the prompt is long
+```
 
-For a stack like React/Next.js on the frontend with Django on the backend, the answer comes down to where you are in 2026:
+The default that surprised me is permissions. ForgeCode ships with `restricted = false`, and its built-in policy allows every read, write, command, and URL. There's a real policy engine (allow, deny, or confirm per rule), but you have to turn it on:
 
-**Choose Claude Code if:**
-* You need CI/CD integration with GitHub Actions or GitLab today
-* Your team relies on MCP-connected tools (Sentry, Linear, Slack bots triaging bugs into PRs)
-* You want automatic cost optimization via prompt caching and model tiering (Haiku for tests, Opus for architecture)
-* You're already inside the Anthropic ecosystem
+```toml
+# .forge.toml
+restricted = true   # without this, the agent runs any command it decides to run
+```
 
-**Choose ForgeCode if:**
-* You want vendor neutrality and the ability to swap between OpenAI, Anthropic, Google, or on-prem models per task
-* Benchmark-grade task completion matters more than ecosystem breadth (CI agents, autonomous batch processing)
-* You're a small team that values runtime engineering control over plug-and-play integrations
-* You want to avoid rate-limit politics entirely
+Also read the README's note on indexing before you point it at a client's code: semantic search "sends file content to the workspace server."
 
-For most teams shipping production React/Django apps right now, Claude Code is the pragmatic choice. The ecosystem integration saves hours per week. But watch ForgeCode closely. Their ForgeCode Services layer, which includes semantic entry-point discovery, dynamic skill loading, tool-call correction, and automated reasoning budgets, represents the kind of runtime-first thinking that eventually wins in [distributed systems](/blog/cap-theorem-for-developers/).[^2]
+## ForgeCode vs Claude Code: Which Should You Pick Now?
 
-## The Architecture That Matters Isn't the Model
+| | ForgeCode CLI (v2.14.0) | Claude Code (2.1.302) |
+|---|---|---|
+| License | Apache-2.0, open source | Proprietary |
+| Models | 48 providers, including local | Anthropic models via API, Bedrock, Google Cloud, Foundry |
+| Default permissions | Everything allowed; `restricted = true` to gate | Auto mode: rules, then a safety classifier |
+| Headless | `forge -p` | `claude -p` |
+| CI | Your own workflow around `forge -p` | GitHub Actions and GitLab CI/CD integrations |
+| GitHub stars | ~7,600 | ~152,000 |
 
-Here's the thing the benchmark delta reveals: the gap between a 58% agent and an 81.8% agent isn't a smarter model. It's smarter scaffolding. ForgeCode proved that with the *same* models (Claude Opus 4.6, GPT-5.4), disciplined runtime constraints beat raw intelligence.[^1]
+Claude Code's permission story changed the most since April. My first version called "permission fatigue" its biggest pain point, and Anthropic's own docs still say it well: "After the tenth approval you're clicking through rather than reviewing."[^9] Auto mode answers it. Since v2.1.283 it's the starting mode for interactive sessions, so rules resolve first, reads and in-project edits pass automatically, and a classifier reviews the rest (more on [how that classifier decides](/blog/claude-code-unpacked-what-512k-lines-of-leaked-source-tells-you-about-agentic-ai/)). For hard guarantees, put [hooks](/blog/claude-code-hooks-complete-guide/) in front of it.
 
-This mirrors a pattern we've seen across distributed systems for decades. The best database isn't the one with the fastest storage engine; it's the one with the best query planner. The best container orchestrator isn't the one with the most features; it's the one with the sanest defaults.
+Two claims from the first version needed fixing on the Claude Code side too. Prompt caching is real and large: cache hits on Sonnet 5.5 cost $0.10 per million tokens against $2.00 for fresh input.[^10] But I repeated a blog's claim that "all users share the same cached prefix," and Anthropic's docs say the opposite: "Different organizations never share caches, even if they use identical prompts." The other was usage limits: Pro and Max plans still have a five-hour session limit and a weekly limit, shared with the Claude chat app, though you can now turn on usage credits and keep working past them.[^11]
 
-Claude Code has the ecosystem. ForgeCode has the runtime. In 2026, the ecosystem wins on adoption. But the teams building the next generation of agentic CI/CD pipelines, the ones running headless multi-agent orchestration via `forge run` in production, are going to care a lot more about that 81.8% than about GitHub star counts.
+My pick for most teams is Claude Code: the safer default, the CI integrations, and the [extension surface](/blog/every-knob-in-a-claude-code-skill-md/), plus the top of the current leaderboard if you care about that. Pick ForgeCode if you need an open-source agent you can point at any model, including one running on your own hardware. Just turn on `restricted` on day one, and keep in mind that the company's attention has moved to a different product.
 
-Pick the tool that matches your constraint today. Keep your architecture portable enough to switch when the constraint changes. That's what model-agnostic really means.
+## How Should You Read an Agent Benchmark?
 
-## References
+Check who ran it. Terminal-Bench marked verified runs on the 2.0 board, and the difference between "a team member ran this" and "a vendor uploaded this" turned out to be the whole story. Check which version of the exam it was, because 2.0, 2.1, and 4.0 scores aren't comparable. Check the confidence interval, and treat overlapping rows as a tie.
 
-[^1]: https://www.tbench.ai/leaderboard/terminal-bench/2.0
-[^2]: https://forgecode.dev/blog/benchmarks-dont-matter/
-[^3]: https://forgecode.dev/blog/gpt-5-4-agent-improvements/
-[^4]: https://code.claude.com/docs/en/platforms
-[^5]: https://code.claude.com/docs/en/mcp
-[^6]: https://introl.com/blog/claude-code-cli-comprehensive-guide-2025
-[^7]: https://www.claudecodecamp.com/p/inside-claude-code-s-system-prompt
-[^8]: https://www.anthropic.com/engineering/claude-code-sandboxing
+Then run your own. The leaderboard harness is open source, and anyone can rerun an agent the way submitters did:
+
+```bash
+# Terminal-Bench 2.0 submissions: one agent, one model, 5 attempts per task
+harbor run -d terminal-bench@2.0 -a "<agent>" -m "<model>" -k 5
+```
+
+Better still, take 20 tasks from your own backlog with tests that already exist, and run each agent on them. Read the traces before you read the pass rate. That's how the UPenn team caught the answer keys, and it's the only benchmark that grades your actual exam.
+
+A leaderboard score is a claim. Ask who's making it.
+
+[^1]: https://www.tbench.ai/news/announcement-2-0 (the paper: https://arxiv.org/abs/2601.11868)
+[^2]: https://debugml.github.io/cheating-agents/ (Stein, Brown, Hassani, Naik, and Wong, April 10, 2026)
+[^3]: https://www.tbench.ai/news/leaderboard-integrity-update
+[^4]: https://web.archive.org/web/20260304235343/https://forgecode.dev/blog/benchmarks-dont-matter/
+[^5]: https://web.archive.org/web/20260325081417/https://forgecode.dev/blog/gpt-5-4-agent-improvements/
+[^6]: https://www.tbench.ai/news/terminal-bench-2-1
+[^7]: https://www.tbench.ai/news/terminal-bench-3-0 and https://www.tbench.ai/news/terminal-bench-4-0 (leaderboard: https://www.tbench.ai/)
+[^8]: https://github.com/tailcallhq/forgecode/releases/tag/v2.14.0
 [^9]: https://code.claude.com/docs/en/best-practices
-[^10]: https://www.truefoundry.com/blog/claude-code-limits-explained
+[^10]: https://platform.claude.com/docs/en/build-with-claude/prompt-caching
+[^11]: https://support.claude.com/en/articles/11145838-using-claude-code-with-your-pro-or-max-plan

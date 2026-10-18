@@ -120,6 +120,22 @@ export const COVERS: Record<string, CoverSpec> = {
     },
   },
 
+  'forgecode-vs-claude-code-which-cli-agent-wins-in-2026': {
+    kicker: 'ForgeCode vs Claude Code',
+    short: 'What happened to the 81.8%',
+    stat: '81.8% → off the board',
+    diagram: {
+      kind: 'events',
+      items: [
+        { t: 'Mar 12 · ForgeCode 81.8%' },
+        { t: 'Apr 10 · answer keys in AGENTS.md' },
+        { t: 'Apr · trials rescored', hot: true, tag: 'reward 0' },
+        { t: 'May 19 · off the 2.0 board' },
+      ],
+      caption: 'Terminal-Bench 4.0: Claude Code #1 at 64.8%',
+    },
+  },
+
   'wild-west-of-ai-protocols': {
     kicker: 'Beyond MCP',
     short: 'The wild west of AI agent protocols',

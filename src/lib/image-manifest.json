@@ -54,11 +54,6 @@
     "height": 1710,
     "webp": "/content/images/2026/04/claude-code-unpacked-what-512k-lines-of-leaked-source-tells-you-about-agentic-ai.webp"
   },
-  "/content/images/2026/04/claudecode_vs_forgecode.png": {
-    "width": 1376,
-    "height": 768,
-    "webp": "/content/images/2026/04/claudecode_vs_forgecode.webp"
-  },
   "/content/images/2026/10/open-questions-demo.gif": {
     "width": 1240,
     "height": 800,
@@ -83,6 +78,11 @@
     "width": 2400,
     "height": 1260,
     "webp": "/content/images/covers/every-knob-in-a-claude-code-skill-md.webp"
+  },
+  "/content/images/covers/forgecode-vs-claude-code-which-cli-agent-wins-in-2026.png": {
+    "width": 2400,
+    "height": 1260,
+    "webp": "/content/images/covers/forgecode-vs-claude-code-which-cli-agent-wins-in-2026.webp"
   },
   "/content/images/covers/how-to-stop-your-solidity-code-from-guzzling-gas-and-eth.png": {
     "width": 2400,
