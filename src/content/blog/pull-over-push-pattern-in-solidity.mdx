@@ -1,7 +1,8 @@
 ---
 title: "Pull Over Push Pattern in Solidity: Safe ETH Withdrawals"
-description: "Pull over push pattern in Solidity: let users withdraw funds instead of sending them, so one failing transfer can't block payouts. With OpenZeppelin code."
+description: "Pull over push in Solidity: why paying users in a loop breaks, and how to let them withdraw with call, checks-effects-interactions, and ReentrancyGuard."
 date: 2024-05-31
+updated: 2026-10-18
 image: /content/images/covers/pull-over-push-pattern-in-solidity.png
 authors:
   - jack-klimov
@@ -12,85 +13,135 @@ tags:
 featured: true
 ---
 
-## Introduction
+In February 2016, King of the Ether Throne crowned new monarchs who never paid the old ones. The contract sent each dethroned king his compensation with `send`, which forwards a 2,300 gas stipend. That wasn't enough for the Mist contract wallets some players used, so the payments bounced, and the contract didn't check. It kept going as if everyone had been paid. The operator ended up refunding about 98 ether by hand.[^1]
 
-In the world of Ethereum smart contracts, transferring ETH can be tricky. The "Pull over Push" pattern is a method that shifts the responsibility of withdrawing funds from the contract to the user, ensuring smoother and safer transactions. This approach is crucial for avoiding common pitfalls when dealing with multiple recipients or complex contract logic.
+That's the push pattern failing quietly. Check the result and it fails loudly instead: one recipient that won't take the money reverts every payout in the batch. Pull over push fixes both versions of the bug. The contract records what each person is owed, and each person comes to collect it.
 
-## Why the Push Pattern Fails
+## What Goes Wrong When a Contract Pushes ETH?
 
-The traditional approach to sending funds — automatically pushing ether to users — seems straightforward but can lead to several issues.
-
-Here's a simplified example of the push pattern, where we transfer ETH directly to all receivers when the `distributeFunds` function is called.
+Think of push as a courier van with a strict rule: the van can't come back until every parcel on the route is delivered. Here's that van in Solidity.
 
 ```solidity
-// Push pattern - NOT RECOMMENDED
-function distributeFunds(address[] memory recipients, uint256[] memory amounts) external {
-    for (uint256 i = 0; i < recipients.length; i++) {
-        payable(recipients[i]).transfer(amounts[i]);
+// Push: one bad recipient and nobody gets paid
+function distribute(address[] calldata recipients, uint256[] calldata amounts) external payable {
+    require(msg.sender == owner, "not owner");
+    for (uint256 i; i < recipients.length; ++i) {
+        (bool ok, ) = recipients[i].call{value: amounts[i]}("");
+        require(ok, "payout failed"); // one revert here undoes every payout before it
     }
 }
 ```
 
-### Issues with the Push Pattern:
-
-1. **Gas Limit Problems**: Iterating over a large array of addresses can exceed the block gas limit, making the function fail (more on [loops and gas costs in Solidity](/blog/how-to-stop-your-solidity-code-from-guzzling-gas-and-eth/)).
-2. **Expense for Contract Owner**: The user who calls the withdraw function pays for all the gas, which can be really expensive.
-3. **Potential for Failure**: If even one transfer fails (e.g., due to a recipient contract throwing an error) the entire transaction will be reverted.
-
-## The Better Way — The Pull Pattern
-
-Instead of pushing funds to users, the pull pattern allows each user to withdraw their funds independently. This individualizes transactions, enhancing security and spreading out gas costs.
+The first problem is the locked door. Any recipient that's a contract can refuse delivery, and it takes one line:
 
 ```solidity
-// Pull pattern - RECOMMENDED
-mapping(address => uint256) public balances;
-
-function deposit() external payable {
-    balances[msg.sender] += msg.value;
-}
-
-function withdraw() external {
-    uint256 amount = balances[msg.sender];
-    require(amount > 0, "No funds to withdraw");
-    balances[msg.sender] = 0;
-    (bool success, ) = msg.sender.call{value: amount}("");
-    require(success, "Transfer failed");
+contract Blocker {
+    receive() external payable { revert("no thanks"); }
 }
 ```
 
-### Benefits of the Pull Approach:
+Put `Blocker` third in a list of a hundred and the whole transaction reverts. The two people ahead of it get nothing either, because their transfers roll back with the rest. If `Blocker` belongs to someone who wants your contract stuck, it stays stuck: every retry hits the same door. The Smart Contract Weakness Classification (SWC) registry files this as SWC-113, DoS with Failed Call.[^2]
 
-1. **Isolated Failures**: Each withdrawal is a separate transaction. If one fails, others are unaffected.
-2. **Fair Cost Distribution**: Users only pay for their own withdrawals, which distributes the gas costs more fairly.
-3. **Enhanced Efficiency**: Avoids the inefficiency of looping through potentially large arrays, leading to lower gas usage.
+The second problem is the length of the route. A loop over an unbounded array eventually needs more gas than a block holds (SWC-128), and from then on `distribute` can't run at all.[^3] (More on [loops and gas costs in Solidity](/blog/how-to-stop-your-solidity-code-from-guzzling-gas-and-eth/).) The third is the bill. Whoever calls `distribute` pays gas for every transfer on the list, including the transfers that end up reverting.
 
-## OpenZeppelin's Implementation of the Pull Pattern
+Drop the `require(ok)` to stop the reverts and you've rebuilt King of the Ether: the loop finishes, and the failed payments vanish without a trace.
 
-If you want real-world best practices, check how OpenZeppelin implements the Pull over Push pattern in its `PullPayment.sol` contract. This implementation leverages the Escrow contract to manage user funds securely, but the whole idea is pretty straightforward and should be clear for you already.
+## Why Not Use transfer() Instead?
+
+Older tutorials (including the first version of this post) reach for `payable(x).transfer(amount)`. It reverts on failure, which looks safer than an unchecked `send`. It isn't, because it forwards the same 2,300 gas stipend.
+
+That stipend made sense in 2016. Then gas prices for opcodes changed under it. EIP-1884, part of the Istanbul upgrade in December 2019, raised `SLOAD` from 200 to 800 gas, and its own spec warns that fallback functions which read storage may no longer fit in 2,300.[^4] Contracts that worked one day started rejecting ETH the next, without anyone changing a line.
+
+Since Pectra in May 2025, EIP-7702 lets an ordinary externally owned account delegate to contract code, and a call to that account runs the code.[^5] So "it's just a wallet, it has no code" stopped being a safe assumption. Solidity 0.8.31 (December 3, 2025) deprecated both `transfer` and `send` ahead of their removal in 0.9.0.[^6]
+
+My rule: don't write `transfer` or `send` in new code. Use `call`, check the result, and design the contract so one failing call can't hurt anyone else. That last part is the pull pattern.
+
+## How Does the Pull Pattern Work?
+
+Swap the courier for a wall of parcel lockers. The contract puts each person's money in their locker (a mapping entry) and walks away. Collecting is the recipient's job, in their own transaction.
 
 ```solidity
-// OpenZeppelin PullPayment example
-abstract contract PullPayment {
-    Escrow private immutable _escrow;
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.37;
 
-    constructor() {
-        _escrow = new Escrow();
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+contract Payouts is ReentrancyGuard {
+    error NotOwner();
+    error LengthMismatch();
+    error WrongTotal();
+    error NothingToWithdraw();
+    error TransferFailed();
+
+    event Credited(address indexed payee, uint256 amount);
+    event Withdrawn(address indexed payee, address to, uint256 amount);
+
+    address public immutable owner = msg.sender;
+    mapping(address => uint256) public owed;
+
+    // Bookkeeping only. No ETH leaves here, so no recipient can make this revert.
+    function credit(address[] calldata payees, uint256[] calldata amounts) external payable {
+        if (msg.sender != owner) revert NotOwner();
+        if (payees.length != amounts.length) revert LengthMismatch();
+        uint256 total;
+        for (uint256 i; i < payees.length; ++i) {
+            owed[payees[i]] += amounts[i];
+            total += amounts[i];
+            emit Credited(payees[i], amounts[i]);
+        }
+        if (total != msg.value) revert WrongTotal();
     }
 
-    function withdrawPayments(address payable payee) public virtual {
-        _escrow.withdraw(payee);
-    }
-
-    function payments(address payee) public view returns (uint256) {
-        return _escrow.depositsOf(payee);
-    }
-
-    function _asyncTransfer(address dest, uint256 amount) internal virtual {
-        _escrow.deposit{value: amount}(dest);
+    // `to` lets a wallet that can't receive ETH send its balance somewhere that can
+    function withdraw(address payable to) external nonReentrant {
+        uint256 amount = owed[msg.sender];           // checks
+        if (amount == 0) revert NothingToWithdraw();
+        owed[msg.sender] = 0;                        // effects: zero it BEFORE the call
+        (bool ok, ) = to.call{value: amount}("");    // interactions: last, always
+        if (!ok) revert TransferFailed();
+        emit Withdrawn(msg.sender, to, amount);
     }
 }
 ```
 
-## Conclusion
+I compiled this with solc 0.8.37 against OpenZeppelin Contracts 5.7.0 and ran it in a local EVM with `Blocker` on the payee list. Alice and Bob withdrew fine. `Blocker` could only fail its own withdrawal, and when it passed a different `to` address, its money came out too. The same `Blocker` in the push version reverted the whole batch, and nobody got paid.
 
-The "Pull over Push" pattern offers a significant improvement in managing ether transfers within Ethereum smart contracts. By letting users withdraw their funds independently, this method enhances security and mitigates the risk of transaction failures. However, it is essential for developers to weigh the trade-offs and ensure that users are well-informed about the withdrawal process to maximize efficiency and user satisfaction.
+`credit` still loops, so I'm not pretending the gas problem disappears. What changes is that the loop only writes storage. Nothing in it calls a recipient, so nobody on the list can make it revert, and if the list is long, the owner splits it across several transactions. In a lot of real contracts you don't need a batch at all: an auction credits the outbid bidder at the moment they're outbid. The Solidity docs show the same move with a "become the richest" game, a direct descendant of King of the Ether.[^7]
+
+## Is Checks-Effects-Interactions Enough, or Do You Need ReentrancyGuard?
+
+Look at the order inside `withdraw`. Check the balance, then zero it, and only then make the external call. That's checks-effects-interactions, and it's what the Solidity security docs recommend.[^8] If the recipient's `receive` calls `withdraw` again, `owed[msg.sender]` is already 0 and the second call reverts with `NothingToWithdraw`.
+
+Get the order wrong and you've written the 2016 DAO hack.
+
+So why `nonReentrant` as well? Because CEI protects the function you're looking at, and contracts grow. Six months from now someone adds a `transferCredit` function that moves balances between accounts, and a reentrant call into it during a withdrawal is the kind of cross-function bug that slips through review. The guard costs a little gas and closes the whole class. In my test, a contract that tried to re-enter from its `receive` tripped `ReentrancyGuardReentrantCall`, its `receive` reverted, and the outer withdrawal failed with `TransferFailed`. Balance untouched.
+
+One version note. OpenZeppelin moved `ReentrancyGuard` from `security/` to `utils/` in 5.0, so old import paths break.[^9] Since 5.1 there's also `ReentrancyGuardTransient`, which keeps its lock in EIP-1153 transient storage and costs less. Use it on any chain that has had the Cancun upgrade.
+
+## What Happened to OpenZeppelin's PullPayment?
+
+It's gone. OpenZeppelin Contracts 5.0.0 (October 5, 2023) removed `PullPayment` along with all the escrow contracts: `Escrow`, `ConditionalEscrow`, and `RefundEscrow`.[^9] The changelog names no replacement.
+
+Here's my admitted failure. The first version of this post, published in May 2024, sent you to `PullPayment.sol` as the real-world reference. It had been deleted seven months earlier, and the link 404'd. If you're still on 4.x, the contract lives on in the v4.9 docs and works the way it always did:[^10] `_asyncTransfer` deposits into an `Escrow` the contract deploys for itself, and `withdrawPayments` pays out.
+
+For new code, I wouldn't miss it. The whole pattern is the mapping plus a CEI withdraw, about 20 lines you can read in one sitting. The escrow added a second contract and an extra hop for no real gain. If you'd rather not hand-roll the low-level call, OpenZeppelin's `Address.sendValue` forwards all gas and reverts on failure, so it works as a drop-in inside `withdraw`.[^11]
+
+## What Does the Pull Pattern Cost You?
+
+Users pay for it. Every recipient now sends a transaction and pays its gas, which is fine for a 10 ETH payout and annoying for a 0.001 ETH one. Your front end has to show what's claimable, or people won't know they have money waiting. And some never come back: unclaimed balances can sit in the contract for years, so decide early whether they can expire or be swept, and write that rule down before you launch.
+
+Push still has a place. Paying your own treasury multisig, or a fixed address you control, carries no griefing risk, and making it a two-step claim adds work with nothing gained. The rule I use: if anyone outside your team chooses an address that ends up on the payout path, use pull.
+
+Open the contract you shipped last. Search for `.transfer(` and for any loop that makes an external call. Every hit is a door someone else holds the key to.
+
+[^1]: https://www.kingoftheether.com/postmortem.html
+[^2]: https://swcregistry.io/docs/SWC-113 (the registry hasn't been actively maintained since 2020, but the IDs are still the common shorthand in audits)
+[^3]: https://swcregistry.io/docs/SWC-128
+[^4]: https://eips.ethereum.org/EIPS/eip-1884
+[^5]: https://eips.ethereum.org/EIPS/eip-7702
+[^6]: https://forum.soliditylang.org/t/solidity-v0-8-31-is-out/3649
+[^7]: https://docs.soliditylang.org/en/latest/common-patterns.html#withdrawal-from-contracts
+[^8]: https://docs.soliditylang.org/en/latest/security-considerations.html#reentrancy
+[^9]: https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/CHANGELOG.md
+[^10]: https://docs.openzeppelin.com/contracts/4.x/api/security#PullPayment
+[^11]: https://docs.openzeppelin.com/contracts/5.x/api/utils#Address-sendValue-address-payable-uint256-
