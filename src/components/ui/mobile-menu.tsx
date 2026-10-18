@@ -29,12 +29,12 @@ const MobileMenu = () => {
   return (
     <DropdownMenu open={isOpen} onOpenChange={(val) => setIsOpen(val)}>
       <DropdownMenuTrigger asChild onClick={() => setIsOpen((val) => !val)}>
-        <Button variant="outline" size="icon" className="md:hidden" title="Menu">
-          <Menu className="h-5 w-5" />
+        <Button variant="outline" size="icon" className="md:hidden size-9 rounded-full border-border bg-surface dark:bg-surface dark:border-border text-muted-foreground" title="Menu">
+          <Menu className="size-4" />
           <span className="sr-only">Toggle menu</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="bg-background">
+      <DropdownMenuContent align="end" className="bg-surface rounded-xl">
         {NAV_LINKS.map((item) => {
           const isExternal = isExternalLink(item.href)
           const isInsideLink = item.label.toLowerCase() === 'inside'

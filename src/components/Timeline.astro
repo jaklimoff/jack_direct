@@ -1,0 +1,277 @@
+---
+import { getPostReadingTime } from '@/lib/data-utils'
+import { TOPICS, getPostTopic, shortReadTime, topicColor } from '@/lib/topics'
+import type { CollectionEntry } from 'astro:content'
+
+interface Props {
+  posts: CollectionEntry<'blog'>[]
+  index?: string
+  label?: string
+  filter?: boolean
+  // Show this many posts, hide the rest behind "Load older posts"
+  limit?: number
+  // Highlight the newest post's node
+  highlightLatest?: boolean
+  moreHref?: string
+}
+
+const {
+  posts,
+  index = '02',
+  label = 'writing',
+  filter = false,
+  limit,
+  highlightLatest = true,
+  moreHref = '/blog',
+} = Astro.props
+
+const items = await Promise.all(
+  posts.map(async (post, i) => {
+    const topic = getPostTopic(post)
+    return {
+      post,
+      topic,
+      color: topicColor(topic),
+      date: post.data.date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'UTC',
+      }),
+      readTime: shortReadTime(await getPostReadingTime(post.id)),
+      older: limit !== undefined && i >= limit,
+      latest: highlightLatest && i === 0,
+    }
+  }),
+)
+
+const years: { year: string; items: typeof items }[] = []
+for (const item of items) {
+  const year = String(item.post.data.date.getUTCFullYear())
+  const last = years.at(-1)
+  if (last?.year === year) last.items.push(item)
+  else years.push({ year, items: [item] })
+}
+
+const present = new Set(items.map((i) => i.topic))
+const topics = TOPICS.filter((t) => present.has(t))
+const hasOlder = items.some((i) => i.older)
+---
+
+<section class="timeline" data-timeline>
+  <div
+    class="mb-7 flex flex-wrap items-center gap-x-5 gap-y-3.5 font-mono text-xs tracking-normal"
+  >
+    <h2 class="text-faint m-0 font-normal">
+      <span class="text-primary">{index}</span> / {label}
+    </h2>
+    <span class="bg-border h-px min-w-10 flex-1"></span>
+    {
+      filter && topics.length > 1 && (
+        <div
+          role="group"
+          aria-label="Filter by topic"
+          class="flex flex-wrap gap-x-4 gap-y-1"
+        >
+          <button
+            type="button"
+            data-topic-btn="all"
+            aria-pressed="true"
+            class="topic-btn"
+          >
+            all
+          </button>
+          {topics.map((t) => (
+            <button
+              type="button"
+              data-topic-btn={t}
+              aria-pressed="false"
+              class="topic-btn"
+            >
+              <span
+                class="size-1.5 rounded-full"
+                style={`background: ${topicColor(t)}`}
+              />
+              {t}
+            </button>
+          ))}
+        </div>
+      )
+    }
+  </div>
+
+  {
+    years.map((y) => (
+      <div
+        class="grid grid-cols-[52px_minmax(0,1fr)] gap-3 sm:grid-cols-[64px_minmax(0,1fr)]"
+        data-year
+        hidden={y.items.every((i) => i.older) || undefined}
+      >
+        <h3 class="text-foreground m-0 pt-3.5 font-mono text-xs font-medium tracking-normal">
+          {y.year}
+        </h3>
+        <ul class="relative m-0 list-none p-0 pb-7">
+          <span
+            class="bg-border absolute top-0 bottom-0 left-[5px] w-px"
+            aria-hidden="true"
+          />
+          {y.items.map((item) => (
+            <li
+              data-post
+              data-topic={item.topic}
+              hidden={item.older || undefined}
+              data-older={item.older ? 'true' : undefined}
+              style={`--c: ${item.color}`}
+            >
+              <a
+                href={`/blog/${item.post.id}/`}
+                data-internal-link="true"
+                class="group relative flex flex-col gap-[5px] py-3 pr-0 pb-3.5 pl-8"
+              >
+                <span
+                  class:list={['tl-node', { 'is-latest': item.latest }]}
+                  aria-hidden="true"
+                />
+                <span class="text-faint font-mono text-[11.5px] tracking-normal">
+                  <time datetime={item.post.data.date.toISOString()}>
+                    {item.date}
+                  </time>{' '}
+                  · <span style="color: var(--c)">{item.topic}</span> ·{' '}
+                  {item.readTime}
+                </span>
+                <h4 class="text-foreground group-hover:text-primary m-0 text-[16.5px] leading-[1.4] font-medium tracking-[-0.012em] transition-colors">
+                  {item.post.data.title}
+                </h4>
+                <p class="text-muted-foreground m-0 truncate text-[13.5px] leading-normal">
+                  {item.post.data.description}
+                </p>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))
+  }
+
+  {
+    hasOlder && (
+      <div class="flex justify-center pt-5" data-more>
+        <a
+          href={moreHref}
+          data-more-btn
+          class="border-strong text-foreground hover:border-faint inline-flex h-[42px] items-center gap-2.5 rounded-full border px-5 text-sm font-medium transition-colors"
+        >
+          Load older posts
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            aria-hidden="true"
+          >
+            <path d="M12 5v14M6 13l6 6 6-6" />
+          </svg>
+        </a>
+      </div>
+    )
+  }
+</section>
+
+<style>
+  .topic-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0;
+    border: 0;
+    border-bottom: 1.5px solid transparent;
+    background: transparent;
+    color: var(--muted-foreground);
+    font: inherit;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+
+  .topic-btn:hover {
+    color: var(--foreground);
+  }
+
+  .topic-btn[aria-pressed='true'] {
+    color: var(--foreground);
+    border-bottom-color: var(--primary);
+  }
+
+  .tl-node {
+    position: absolute;
+    left: 0;
+    top: 17px;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--c);
+    box-shadow: 0 0 0 4px var(--background);
+    transition: transform 0.15s;
+  }
+
+  .tl-node.is-latest {
+    box-shadow:
+      0 0 0 4px var(--background),
+      0 0 0 5px color-mix(in srgb, var(--c) 55%, transparent);
+  }
+
+  a:hover .tl-node {
+    transform: scale(1.18);
+  }
+</style>
+
+<script>
+  function initTimelines() {
+    document
+      .querySelectorAll<HTMLElement>('[data-timeline]:not([data-bound])')
+      .forEach((root) => {
+        root.dataset.bound = 'true'
+        const buttons =
+          root.querySelectorAll<HTMLButtonElement>('[data-topic-btn]')
+        const posts = root.querySelectorAll<HTMLElement>('[data-post]')
+        const years = root.querySelectorAll<HTMLElement>('[data-year]')
+        const more = root.querySelector<HTMLElement>('[data-more]')
+        let topic = 'all'
+        let expanded = false
+
+        const apply = () => {
+          posts.forEach((p) => {
+            const match = topic === 'all' || p.dataset.topic === topic
+            const older = p.dataset.older === 'true'
+            p.hidden = !match || (topic === 'all' && older && !expanded)
+          })
+          years.forEach((y) => {
+            y.hidden = !y.querySelector('[data-post]:not([hidden])')
+          })
+          if (more) more.hidden = topic !== 'all' || expanded
+        }
+
+        buttons.forEach((b) =>
+          b.addEventListener('click', () => {
+            topic = b.dataset.topicBtn ?? 'all'
+            buttons.forEach((x) =>
+              x.setAttribute('aria-pressed', String(x === b)),
+            )
+            apply()
+          }),
+        )
+
+        root
+          .querySelector('[data-more-btn]')
+          ?.addEventListener('click', (e) => {
+            e.preventDefault()
+            expanded = true
+            apply()
+          })
+      })
+  }
+
+  initTimelines()
+  document.addEventListener('astro:page-load', initTimelines)
+</script>

@@ -1,7 +1,7 @@
 ---
-import BlogCard from '@/components/BlogCard.astro'
 import Breadcrumbs from '@/components/Breadcrumbs.astro'
 import PageHead from '@/components/PageHead.astro'
+import Timeline from '@/components/Timeline.astro'
 import Layout from '@/layouts/Layout.astro'
 import { getAllTags, getPostsByTag } from '@/lib/data-utils'
 
@@ -26,7 +26,7 @@ export async function getStaticPaths() {
 const { tag, posts } = Astro.props
 ---
 
-<Layout class="max-w-3xl">
+<Layout class="max-w-[900px] sm:px-6">
   <PageHead
     slot="head"
     title={`Posts tagged with "${tag}"`}
@@ -40,13 +40,10 @@ const { tag, posts } = Astro.props
     ]}
   />
 
-  <ul class="flex flex-col gap-y-4">
-    {
-      posts.map((post) => (
-        <li>
-          <BlogCard entry={post} />
-        </li>
-      ))
-    }
-  </ul>
+  <Timeline
+    posts={posts}
+    index="01"
+    label={`#${tag} · ${posts.length} post${posts.length === 1 ? '' : 's'}`}
+    highlightLatest={false}
+  />
 </Layout>

@@ -1,41 +1,47 @@
 ---
-import { SOCIAL_LINKS, NAV_LINKS, SITE, ICON_MAP } from '@/consts'
-import Link from '@/components/Link.astro'
-import { Icon } from 'astro-icon/components'
-import type { SocialLink } from '@/types'
+import { SITE, SOCIAL_LINKS } from '@/consts'
+
+const links = [
+  { href: '/blog', label: 'blog' },
+  { href: '/about', label: 'about' },
+  { href: '/rss.xml', label: 'rss' },
+  ...SOCIAL_LINKS.filter((l) => l.label !== 'Medium').map((l) => ({
+    href: l.href,
+    label: l.label.toLowerCase(),
+  })),
+]
 ---
 
-<footer class="border-t border-border/40">
-  <div class="max-w-3xl mx-auto px-4 py-8">
-    <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-      <nav class="flex items-center gap-4 text-sm text-muted-foreground">
-        {NAV_LINKS.map((item) => (
-          <Link href={item.href} class="hover:text-foreground transition-colors capitalize">
-            {item.label}
-          </Link>
-        ))}
-      </nav>
-
-      <div class="flex items-center gap-3">
-        {SOCIAL_LINKS.map(({ href, label }: SocialLink) => (
-          <Link
-            href={href}
-            aria-label={label}
-            title={label}
-            class="text-muted-foreground/60 hover:text-foreground transition-colors"
-            external
-          >
-            <Icon
-              name={ICON_MAP[label as keyof typeof ICON_MAP] || 'lucide:message-circle-question'}
-              class="size-4"
-            />
-          </Link>
-        ))}
-      </div>
-    </div>
-
-    <p class="text-xs text-muted-foreground/50 text-center mt-6">
-      &copy; {new Date().getFullYear()} {SITE.title}
-    </p>
+<footer class="border-border border-t">
+  <div
+    class="text-faint mx-auto flex max-w-[1100px] flex-wrap items-center justify-between gap-4 px-4 py-7 font-mono text-xs tracking-normal sm:px-6"
+  >
+    <span class="flex items-center gap-2">
+      <span
+        class="border-faint grid size-3 place-items-center rounded-full border-[1.5px]"
+        aria-hidden="true"
+      >
+        <span class="bg-primary size-1 rounded-full"></span>
+      </span>
+      &copy; {new Date().getFullYear()}
+      {SITE.title}
+    </span>
+    <nav class="flex flex-wrap gap-[18px]" aria-label="Footer">
+      {
+        links.map(({ href, label }) => {
+          const external = href.startsWith('http')
+          return (
+            <a
+              href={href}
+              class="hover:text-foreground transition-colors"
+              target={external ? '_blank' : undefined}
+              rel={external ? 'noopener noreferrer' : undefined}
+            >
+              {label}
+            </a>
+          )
+        })
+      }
+    </nav>
   </div>
 </footer>

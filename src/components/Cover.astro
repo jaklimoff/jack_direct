@@ -1,0 +1,237 @@
+---
+import { getCover } from '@/lib/covers'
+import { cn } from '@/lib/utils'
+import '@/styles/cover.css'
+
+interface Props {
+  id: string
+  bare?: boolean
+  theme?: 'light' | 'dark'
+  ratio?: number
+  readTime?: string
+  class?: string
+}
+
+const {
+  id,
+  bare = false,
+  theme,
+  ratio = 16 / 9,
+  readTime,
+  class: className,
+} = Astro.props
+const spec = getCover(id)
+if (!spec) return
+
+const d = spec.diagram
+const heightCqw = 100 / ratio
+const scale = bare
+  ? Math.min(1.25, (heightCqw * 0.92) / 42)
+  : Math.min(1, (heightCqw * 0.95) / 42)
+const boxStyle = `right: ${bare ? 29 : 5}cqw; --cv-scale: ${scale.toFixed(3)}`
+const meta = [readTime, spec.stat].filter(Boolean).join(' · ')
+const pct = (n: number) => `${n}%`
+---
+
+<div
+  class={cn('cv', className)}
+  data-cv-theme={theme}
+  style={`aspect-ratio: ${ratio}`}
+  role="img"
+  aria-label={spec.short}
+>
+  {
+    !bare && (
+      <>
+        <div class="cv-text">
+          <span class="cv-kicker">{spec.kicker}</span>
+          <div class="cv-title">{spec.short}</div>
+          {meta && <span class="cv-meta">{meta}</span>}
+        </div>
+        <span class="cv-mark">jack.direct</span>
+      </>
+    )
+  }
+
+  <div class="cv-box" style={boxStyle}>
+    <span class="cv-ring cv-ring-outer"></span>
+    <span class="cv-ring cv-ring-inner"></span>
+
+    {
+      d.kind === 'chat' && (
+        <div class="cv-chat">
+          {d.lines.map((l) => (
+            <span class={cn('cv-chat-line', l.tone && `is-${l.tone}`)}>
+              {l.t}
+            </span>
+          ))}
+          <div class="cv-prompt">
+            <div class="cv-prompt-row">
+              <span class="cv-badge">{d.badge}</span>
+              <span class="cv-chip">{d.chip}</span>
+            </div>
+            <span>{d.prompt}</span>
+          </div>
+          <span class="cv-caption cv-right">{d.caption}</span>
+        </div>
+      )
+    }
+
+    {
+      d.kind === 'events' && (
+        <div class="cv-events">
+          <span class="cv-events-line" />
+          {d.items.map((e) => (
+            <div class={cn('cv-event', e.hot && 'is-hot')}>
+              <span class="cv-node" />
+              <span>{e.t}</span>
+              {e.tag && <span class="cv-tag">{e.tag}</span>}
+            </div>
+          ))}
+          <span class="cv-caption cv-indent">{d.caption}</span>
+        </div>
+      )
+    }
+
+    {
+      d.kind === 'knobs' && (
+        <div class="cv-panel cv-knobs">
+          <div class="cv-panel-head">
+            <span>{d.title}</span>
+            <span>---</span>
+          </div>
+          {d.items.map((k) => (
+            <div class={cn('cv-knob', k.hot && 'is-hot')}>
+              <span class="cv-knob-label">{k.t}</span>
+              <span class="cv-track">
+                <span class="cv-handle" style={`left: ${k.pos}%`} />
+              </span>
+            </div>
+          ))}
+          <span class="cv-caption">{d.caption}</span>
+        </div>
+      )
+    }
+
+    {
+      d.kind === 'graph' && (
+        <div class="cv-graph">
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            {d.edges.map((e) => (
+              <line
+                class={cn('cv-edge', e.hot && 'is-hot')}
+                x1={d.nodes[e.from].x}
+                y1={d.nodes[e.from].y}
+                x2={d.nodes[e.to].x}
+                y2={d.nodes[e.to].y}
+              />
+            ))}
+          </svg>
+          {d.edges
+            .filter((e) => e.label)
+            .map((e) => (
+              <span
+                class={cn('cv-edge-label', e.hot && 'is-hot')}
+                style={`left: ${pct((d.nodes[e.from].x + d.nodes[e.to].x) / 2)}; top: ${pct((d.nodes[e.from].y + d.nodes[e.to].y) / 2)}`}
+              >
+                {e.label}
+              </span>
+            ))}
+          {d.nodes.map((n) => (
+            <span
+              class={cn(
+                'cv-gnode',
+                n.hot && 'is-hot',
+                n.ghost && 'is-ghost',
+                n.sub && 'is-letter',
+              )}
+              style={`left: ${pct(n.x)}; top: ${pct(n.y)}`}
+            >
+              {n.t}
+              {n.sub && <span class="cv-gnode-sub">{n.sub}</span>}
+            </span>
+          ))}
+          {d.caption && (
+            <span class="cv-caption cv-graph-caption">{d.caption}</span>
+          )}
+        </div>
+      )
+    }
+
+    {
+      d.kind === 'stairs' && (
+        <div class="cv-stairs">
+          {d.items
+            .map((s, i) => ({ ...s, n: i + 1 }))
+            .reverse()
+            .map((s) => (
+              <div
+                class={cn('cv-step', s.hot && 'is-hot')}
+                style={`margin-left: ${((s.n - 1) * 2.3).toFixed(1)}cqw`}
+              >
+                <span class="cv-node" />
+                <span class="cv-step-n">{s.n}</span>
+                <span>{s.t}</span>
+              </div>
+            ))}
+          <span class="cv-caption cv-stairs-caption">{d.caption}</span>
+        </div>
+      )
+    }
+
+    {
+      d.kind === 'lanes' && (
+        <div class="cv-lanes">
+          <div class="cv-chips">
+            {d.chips.map((c) => (
+              <span class={cn('cv-chip', c.hot && 'is-hot')}>{c.t}</span>
+            ))}
+          </div>
+          <div class="cv-lane-grid">
+            <span class="cv-barrier">
+              <span class="cv-barrier-label">{d.barrier}</span>
+            </span>
+            {d.lanes.map((l) => (
+              <div class={cn('cv-lane', l.hot && 'is-hot')}>
+                <span class="cv-lane-label">{l.t}</span>
+                <span class="cv-lane-track">
+                  <span class="cv-lane-bar" style={`width: ${l.w}%`} />
+                </span>
+              </div>
+            ))}
+          </div>
+          <span class="cv-caption cv-indent-lanes">{d.caption}</span>
+        </div>
+      )
+    }
+
+    {
+      d.kind === 'slots' && (
+        <div class="cv-slots">
+          {d.rows.map((r) => (
+            <div class="cv-slot-group">
+              <span class="cv-slot-label">{r.label}</span>
+              {r.slots.map((slot) => (
+                <div class="cv-slot">
+                  {slot.map((seg) => (
+                    <span
+                      class={cn('cv-seg', seg.hot && 'is-hot')}
+                      style={`width: ${seg.w}%`}
+                    >
+                      {seg.t}
+                    </span>
+                  ))}
+                </div>
+              ))}
+            </div>
+          ))}
+          <span class="cv-caption">{d.caption}</span>
+        </div>
+      )
+    }
+  </div>
+</div>

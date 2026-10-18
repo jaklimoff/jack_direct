@@ -27,7 +27,9 @@ const parentId = isCurrentSubpost ? getParentId(currentPostId) : currentPostId
         data-toc-scroll-area
       >
         <div class="flex flex-col gap-2 px-4">
-          <span class="text-lg font-medium">Table of Contents</span>
+          <span class="text-faint font-mono text-xs tracking-normal">
+            <span class="text-primary">●</span> contents
+          </span>
           {sections.map((section, index) => {
             const isFirstSubpost =
               section.type === 'subpost' &&

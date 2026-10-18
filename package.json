@@ -23,7 +23,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
-    "new-post": "npx tsx scripts/new-post.ts"
+    "new-post": "npx tsx scripts/new-post.ts",
+    "covers": "node scripts/render-covers.mjs"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.5",

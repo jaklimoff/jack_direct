@@ -1,4 +1,5 @@
 ---
+import Cover from '@/components/Cover.astro'
 import Link from '@/components/Link.astro'
 import PostHead from '@/components/PostHead.astro'
 import PostNavigation from '@/components/PostNavigation.astro'
@@ -7,9 +8,9 @@ import SubpostsHeader from '@/components/SubpostsHeader.astro'
 import SubpostsSidebar from '@/components/SubpostsSidebar.astro'
 import TOCHeader from '@/components/TOCHeader.astro'
 import TOCSidebar from '@/components/TOCSidebar.astro'
-import { badgeVariants } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import Layout from '@/layouts/Layout.astro'
+import { getCover } from '@/lib/covers'
 import {
   getAdjacentPosts,
   getAllPostsAndSubposts,
@@ -22,7 +23,8 @@ import {
   isSubpost,
   parseAuthors,
 } from '@/lib/data-utils'
-import { formatDate, getTagVariant } from '@/lib/utils'
+import { getPostTopic, topicColor } from '@/lib/topics'
+import { formatDate } from '@/lib/utils'
 import { Icon } from 'astro-icon/components'
 import { render } from 'astro:content'
 
@@ -64,9 +66,15 @@ try {
 }
 
 const isCurrentSubpost = isSubpost(currentPostId)
+const topic = getPostTopic(post)
+const hasCover = !!getCover(currentPostId)
 
 // Error handling for navigation and metadata
-let navigation: Awaited<ReturnType<typeof getAdjacentPosts>> = { newer: null, older: null, parent: null }
+let navigation: Awaited<ReturnType<typeof getAdjacentPosts>> = {
+  newer: null,
+  older: null,
+  parent: null,
+}
 let hasChildPosts = false
 let subpostCount = 0
 let postReadingTime = '0 min read'
@@ -114,129 +122,117 @@ try {
   }
 
   <section
-    class="grid grid-cols-[minmax(0px,1fr)_min(calc(var(--breakpoint-md)-2rem),100%)_minmax(0px,1fr)] gap-y-6"
+    class="grid grid-cols-[minmax(0px,1fr)_min(calc(var(--breakpoint-md)-2rem),100%)_minmax(0px,1fr)] gap-y-8"
   >
+    <header class="col-start-2 flex flex-col gap-5 pt-8 sm:pt-12">
+      <nav
+        class="text-faint flex items-center gap-2 font-mono text-xs tracking-normal"
+        aria-label="Breadcrumb"
+      >
+        <a
+          href="/blog"
+          data-internal-link="true"
+          class="hover:text-foreground transition-colors">← writing</a
+        >
+        <span aria-hidden="true">/</span>
+        <a
+          href={`/tags/${topic}/`}
+          class="inline-flex items-center gap-1.5 hover:underline"
+          style={`color: ${topicColor(topic)}`}
+        >
+          <span
+            class="size-1.5 rounded-full"
+            style={`background: ${topicColor(topic)}`}></span>
+          {topic}
+        </a>
+      </nav>
+
+      <h1
+        class="text-foreground m-0 scroll-mt-31 text-[34px] leading-[1.08] font-semibold tracking-[-0.035em] text-balance sm:text-[46px]"
+        id="post-title"
+      >
+        {post.data.title}
+      </h1>
+
+      <p
+        class="text-muted-foreground m-0 text-[17px] leading-relaxed text-pretty sm:text-lg"
+      >
+        {post.data.description}
+      </p>
+
+      <div
+        class="text-faint flex flex-wrap items-center gap-x-3 gap-y-2 font-mono text-xs tracking-normal"
+      >
+        {
+          authors.map((author) => (
+            <span class="text-foreground flex items-center gap-2 font-sans text-sm font-medium">
+              <img
+                src={author.avatar}
+                alt=""
+                width={24}
+                height={24}
+                class="border-border size-6 rounded-full border"
+              />
+              {author.isRegistered ? (
+                <Link
+                  href={`/authors/${author.id}/`}
+                  class="hover:text-primary"
+                >
+                  {author.name}
+                </Link>
+              ) : (
+                author.name
+              )}
+            </span>
+          ))
+        }
+        {authors.length > 0 && <span aria-hidden="true">·</span>}
+        <time datetime={post.data.date.toISOString()}>
+          {formatDate(post.data.date)}
+        </time>
+        <span aria-hidden="true">·</span>
+        <span>
+          {postReadingTime}
+          {
+            combinedReadingTime && combinedReadingTime !== postReadingTime && (
+              <> ({combinedReadingTime} total)</>
+            )
+          }
+        </span>
+        {
+          subpostCount > 0 && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>
+                {subpostCount} subpost{subpostCount === 1 ? '' : 's'}
+              </span>
+            </>
+          )
+        }
+      </div>
+    </header>
+
     {
-      post.data.image && (
-        <div class="col-span-full mx-auto w-full max-w-5xl px-4 sm:px-6">
-          <img
-            src={post.data.image}
-            alt={post.data.title}
-            width={1200}
-            height={630}
-            class="w-full rounded-xl object-cover shadow-sm"
-          />
-        </div>
+      (hasCover || post.data.image) && (
+        <figure class="post-cover col-span-full m-0 mx-auto w-full max-w-[960px] px-4 sm:px-6">
+          <div class="border-border bg-surface rounded-[18px] border p-2">
+            <div class="overflow-hidden rounded-xl">
+              {hasCover ? (
+                <Cover id={currentPostId} bare ratio={2.4} />
+              ) : (
+                <img
+                  src={post.data.image}
+                  alt=""
+                  width={1200}
+                  height={630}
+                  class="block aspect-[2/1] h-auto w-full object-cover"
+                />
+              )}
+            </div>
+          </div>
+        </figure>
       )
     }
-
-    <section class="col-start-2 flex flex-col gap-y-6 text-center">
-      <div class="flex flex-col">
-        <h1
-          class="mb-2 scroll-mt-31 text-3xl leading-tight font-medium sm:text-4xl"
-          id="post-title"
-        >
-          {post.data.title}
-        </h1>
-
-        <div
-          class="text-muted-foreground divide-border mb-4 flex flex-col items-center justify-center divide-y text-xs sm:flex-row sm:flex-wrap sm:divide-x sm:divide-y-0 sm:text-sm"
-        >
-          {
-            authors.length > 0 && (
-              <div class="flex w-full items-center justify-center gap-x-2 py-2 sm:w-fit sm:px-2 sm:py-0 first:sm:pl-0 last:sm:pr-0">
-                {authors.map((author) => (
-                  <div class="flex items-center gap-x-1.5">
-                    <img
-                      src={author.avatar}
-                      alt={author.name}
-                      width={20}
-                      height={20}
-                      class="rounded-full"
-                    />
-                    {author.isRegistered ? (
-                      <Link
-                        href={`/authors/${author.id}/`}
-                        underline
-                        class="text-foreground"
-                      >
-                        <span>{author.name}</span>
-                      </Link>
-                    ) : (
-                      <span>{author.name}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )
-          }
-
-          <div
-            class="flex w-full items-center justify-center gap-2 py-2 sm:w-fit sm:px-2 sm:py-0 first:sm:pl-0 last:sm:pr-0"
-          >
-            <span>{formatDate(post.data.date)}</span>
-          </div>
-
-          <div
-            class="flex w-full items-center justify-center gap-2 py-2 sm:w-fit sm:px-2 sm:py-0 first:sm:pl-0 last:sm:pr-0"
-          >
-            <span>
-              {postReadingTime}
-              {
-                combinedReadingTime &&
-                  combinedReadingTime !== postReadingTime && (
-                    <span class="text-muted-foreground">
-                      {' '}
-                      ({combinedReadingTime} total)
-                    </span>
-                  )
-              }
-            </span>
-          </div>
-
-          {
-            subpostCount > 0 && (
-              <div class="flex w-full items-center justify-center gap-1 py-2 sm:w-fit sm:px-2 sm:py-0 first:sm:pl-0 last:sm:pr-0">
-                <Icon name="lucide:file-text" class="size-3" />
-                {subpostCount} subpost{subpostCount === 1 ? '' : 's'}
-              </div>
-            )
-          }
-        </div>
-        <div class="flex flex-wrap justify-center gap-2">
-          {
-            post.data.tags &&
-              post.data.tags.length > 0 &&
-              post.data.tags.map((tag) => {
-                const { variant, className, tooltip } = getTagVariant(tag)
-                return (
-                  <div class="group relative">
-                    <a
-                      href={`/tags/${tag}/`}
-                      class={`${badgeVariants({ variant })} ${className || ''}`}
-                    >
-                      <Icon name="lucide:hash" class="size-3" />
-                      {tag}
-                    </a>
-                    {tooltip && (
-                      <span class="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-3 w-max max-w-xs rounded-md bg-gray-900 dark:bg-gray-50 px-3 py-2 text-xs text-white dark:text-gray-900 shadow-xl border border-gray-700 dark:border-gray-200 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-200 z-[100]">
-                        {tooltip}
-                        <span class="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[6px] border-r-[6px] border-t-[6px] border-l-transparent border-r-transparent border-t-gray-900 dark:border-t-gray-50"></span>
-                      </span>
-                    )}
-                  </div>
-                )
-              })
-          }
-        </div>
-      </div>
-
-      <PostNavigation
-        newerPost={navigation.newer}
-        olderPost={navigation.older}
-        parentPost={isCurrentSubpost ? navigation.parent : undefined}
-      />
-    </section>
 
     {
       tocSections.length > 0 && (
@@ -247,6 +243,21 @@ try {
     <article class="prose col-start-2 max-w-none">
       <Content />
     </article>
+
+    {
+      post.data.tags && post.data.tags.length > 0 && (
+        <div class="col-start-2 flex flex-wrap gap-2 font-mono text-xs tracking-normal">
+          {post.data.tags.map((tag) => (
+            <a
+              href={`/tags/${tag}/`}
+              class="border-border text-muted-foreground hover:text-foreground hover:border-strong rounded-full border px-3 py-1.5 transition-colors"
+            >
+              #{tag}
+            </a>
+          ))}
+        </div>
+      )
+    }
 
     {
       (hasChildPosts || isCurrentSubpost) && (
@@ -266,9 +277,7 @@ try {
       olderPost={navigation.older}
       parentPost={isCurrentSubpost ? navigation.parent : undefined}
     />
-
   </section>
-
 
   <Button
     variant="outline"
@@ -307,6 +316,17 @@ try {
     })
   </script>
 </Layout>
+
+<style is:global>
+  @media (max-width: 639px) {
+    .post-cover .cv {
+      aspect-ratio: 16 / 9 !important;
+    }
+    .post-cover .cv-box {
+      --cv-scale: 1.22 !important;
+    }
+  }
+</style>
 
 <script>
   if (document.querySelector('.katex')) {

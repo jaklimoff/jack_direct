@@ -1,54 +1,69 @@
 ---
-import Link from '@/components/Link.astro'
+import SearchButton from '@/components/react/SearchButton'
 import ThemeToggle from '@/components/ThemeToggle.astro'
 import MobileMenu from '@/components/ui/mobile-menu'
-import SearchButton from '@/components/react/SearchButton'
-import { NAV_LINKS } from '@/consts'
-import { Icon } from 'astro-icon/components'
-
-const isExternalLink = (href: string) => {
-  return href.startsWith('http')
-}
+import { NAV_LINKS, SITE } from '@/consts'
 ---
 
-<header class="bg-background/50 sticky top-0 z-10 backdrop-blur-md" transition:persist>
-  <div class="mx-auto grid max-w-3xl grid-cols-3 items-center gap-4 p-4">
-    <!-- Left: Navigation -->
-    <nav class="hidden items-center gap-6 text-sm md:flex">
-      {NAV_LINKS.map((item) => {
-        const isExternal = isExternalLink(item.href)
-        return (
-          <Link
+<div class="border-border border-b" transition:persist>
+  <div
+    class="mx-auto grid max-w-[1100px] grid-cols-[1fr_auto_1fr] items-center gap-4 px-4 py-3.5 sm:px-6"
+  >
+    <nav class="hidden items-center gap-[22px] text-sm font-medium md:flex">
+      {
+        NAV_LINKS.map((item) => (
+          <a
             href={item.href}
-            class="text-foreground/80 hover:text-foreground font-medium capitalize transition-colors flex items-center gap-1.5"
+            data-nav-link
+            data-internal-link="true"
+            class="group/nav text-muted-foreground hover:text-foreground aria-[current=page]:text-foreground inline-flex items-center gap-[7px] transition-colors"
           >
-            <span>{item.label}</span>
-            {isExternal && (
-              <Icon
-                name="lucide:external-link"
-                class="size-3.5 opacity-70 flex-shrink-0"
-                aria-hidden="true"
-              />
-            )}
-          </Link>
-        )
-      })}
+            <span class="bg-primary hidden size-[5px] rounded-full group-aria-[current=page]/nav:inline-block" />
+            {item.label}
+          </a>
+        ))
+      }
     </nav>
     <div class="md:hidden">
-      <MobileMenu client:idle transition:persist />
+      <MobileMenu client:idle />
     </div>
 
-    <!-- Center: Site Title -->
-    <div class="flex justify-center">
-      <Link href="/" class="text-foreground hover:text-foreground/80 transition-colors text-lg font-bold tracking-tight">
-        Jack Klimov
-      </Link>
-    </div>
+    <a
+      href="/"
+      data-internal-link="true"
+      class="text-foreground flex items-center gap-2.5 text-[15px] font-semibold tracking-[-0.015em]"
+    >
+      <span
+        class="border-foreground grid size-4 place-items-center rounded-full border-[1.5px]"
+        aria-hidden="true"
+      >
+        <span class="bg-primary size-1.5 rounded-full"></span>
+      </span>
+      {SITE.title}
+    </a>
 
-    <!-- Right: Actions -->
-    <div class="flex items-center justify-end gap-2 md:gap-3">
+    <div class="flex items-center justify-end gap-2">
       <SearchButton client:idle />
-      <ThemeToggle transition:persist />
+      <ThemeToggle />
     </div>
   </div>
-</header>
+</div>
+
+<script>
+  function markActiveNav() {
+    const path = window.location.pathname.replace(/\/$/, '') || '/'
+    document
+      .querySelectorAll<HTMLAnchorElement>('[data-nav-link]')
+      .forEach((a) => {
+        const href = a.getAttribute('href')?.replace(/\/$/, '') || '/'
+        const active =
+          href === '/'
+            ? path === '/'
+            : path === href || path.startsWith(href + '/')
+        if (active) a.setAttribute('aria-current', 'page')
+        else a.removeAttribute('aria-current')
+      })
+  }
+  markActiveNav()
+  document.addEventListener('astro:page-load', markActiveNav)
+</script>

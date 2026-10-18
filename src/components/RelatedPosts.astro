@@ -12,11 +12,17 @@ const relatedPosts = await getRelatedPosts(postId, 3)
 
 {
   relatedPosts.length > 0 && (
-    <section class="col-start-2 flex flex-col gap-y-2" aria-labelledby="related-posts">
-      <h2 id="related-posts" class="text-xl font-medium">
-        Related posts
-      </h2>
-      <ul class="flex flex-col">
+    <section
+      class="col-start-2 mt-6 flex flex-col"
+      aria-labelledby="related-posts"
+    >
+      <div class="mb-2 flex items-center gap-3.5 font-mono text-xs tracking-normal">
+        <h2 id="related-posts" class="text-faint m-0 font-normal">
+          <span class="text-primary">→</span> / related
+        </h2>
+        <span class="bg-border h-px flex-1" />
+      </div>
+      <ul class="divide-border m-0 flex list-none flex-col divide-y p-0">
         {relatedPosts.map((post) => (
           <li>
             <BlogCard entry={post} />

@@ -1,22 +1,20 @@
 ---
-import { Button } from '@/components/ui/button'
 import { Icon } from 'astro-icon/components'
 ---
 
-<Button
+<button
   id="theme-toggle"
-  variant="ghost"
-  size="icon"
+  type="button"
   title="Toggle theme"
-  className="-my-2 -me-2 size-8"
+  class="border-border bg-surface text-muted-foreground hover:text-foreground hover:border-strong relative grid size-9 cursor-pointer place-items-center rounded-full border transition-colors"
 >
-  <Icon name="lucide:sun" class="size-4 dark:hidden" />
-  <Icon name="lucide:moon" class="absolute hidden size-4 dark:block" />
+  <Icon name="lucide:moon" class="size-[15px] dark:hidden" />
+  <Icon name="lucide:sun" class="hidden size-[15px] dark:block" />
   <span class="sr-only">Toggle theme</span>
-</Button>
+</button>
 
 <script is:inline data-astro-rerun>
-  (() => {
+  ;(() => {
     const theme = (() => {
       const stored = localStorage?.getItem('theme') ?? ''
       if (['dark', 'light'].includes(stored)) return stored
@@ -48,9 +46,10 @@ import { Icon } from 'astro-icon/components'
   }
 
   function initThemeToggle() {
-    document
-      .getElementById('theme-toggle')
-      ?.addEventListener('click', handleToggleClick)
+    const button = document.getElementById('theme-toggle')
+    if (!button || button.dataset.bound) return
+    button.dataset.bound = 'true'
+    button.addEventListener('click', handleToggleClick)
   }
 
   initThemeToggle()

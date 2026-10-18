@@ -1,10 +1,10 @@
 ---
-import BlogCard from '@/components/BlogCard.astro'
 import PageHead from '@/components/PageHead.astro'
+import Timeline from '@/components/Timeline.astro'
 import PaginationComponent from '@/components/ui/pagination'
 import { SITE } from '@/consts'
 import Layout from '@/layouts/Layout.astro'
-import { getAllPosts, groupPostsByYear } from '@/lib/data-utils'
+import { getAllPosts } from '@/lib/data-utils'
 import type { PaginateFunction } from 'astro'
 
 export async function getStaticPaths({
@@ -17,39 +17,51 @@ export async function getStaticPaths({
 }
 
 const { page } = Astro.props
-
-const postsByYear = groupPostsByYear(page.data)
-const years = Object.keys(postsByYear).sort((a, b) => parseInt(b) - parseInt(a))
 ---
 
-<Layout class="max-w-3xl">
+<Layout class="max-w-[900px] sm:px-6">
   <PageHead slot="head" title="Blog" />
 
-  <div class="flex min-h-[calc(100vh-18rem)] flex-col">
-    {
-      years.map((year) => (
-        <section class="flex flex-col">
-          <div class="text-muted-foreground/60 text-xs font-medium uppercase tracking-wider mb-2.5 mt-6 first:mt-0">
-            {year}
-          </div>
-          <ul class="flex flex-col gap-2">
-            {postsByYear[year].map((post) => (
-              <li>
-                <BlogCard entry={post} />
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))
-    }
-  </div>
+  <header class="flex flex-col gap-3 pt-10 pb-6 sm:pt-14">
+    <span class="text-faint font-mono text-[12.5px] tracking-normal">
+      <span class="text-primary">●</span>
+      {page.total} posts
+    </span>
+    <h1
+      class="text-foreground m-0 text-[40px] leading-none font-semibold tracking-[-0.04em] sm:text-[48px]"
+    >
+      Writing
+    </h1>
+    <p
+      class="text-muted-foreground m-0 max-w-[520px] text-base leading-relaxed"
+    >
+      Notes on agentic coding, distributed systems, and running engineering
+      teams.
+    </p>
+  </header>
 
-  <div class="mt-6">
-    <PaginationComponent
-      currentPage={page.currentPage}
-      totalPages={page.lastPage}
-      baseUrl="/blog/"
-      client:idle
+  <div class="flex min-h-[calc(100vh-24rem)] flex-col">
+    <Timeline
+      posts={page.data}
+      index={String(page.currentPage).padStart(2, '0')}
+      label={page.lastPage > 1
+        ? `page ${page.currentPage} of ${page.lastPage}`
+        : 'all posts'}
+      filter
+      highlightLatest={page.currentPage === 1}
     />
   </div>
+
+  {
+    page.lastPage > 1 && (
+      <div class="mt-2">
+        <PaginationComponent
+          currentPage={page.currentPage}
+          totalPages={page.lastPage}
+          baseUrl="/blog/"
+          client:idle
+        />
+      </div>
+    )
+  }
 </Layout>

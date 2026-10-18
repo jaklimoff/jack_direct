@@ -1,0 +1,105 @@
+---
+// Dev-only cover preview. /covers shows every cover in every variant,
+// /covers/<post-id> renders one social image (used by scripts/render-covers.mjs).
+// Production builds generate no pages here.
+import Cover from '@/components/Cover.astro'
+import { COVERS } from '@/lib/covers'
+import { getPostReadingTime } from '@/lib/data-utils'
+import '@/styles/global.css'
+
+export function getStaticPaths() {
+  if (import.meta.env.PROD) return []
+  return [
+    { params: { slug: undefined } },
+    ...Object.keys(COVERS).map((slug) => ({ params: { slug } })),
+  ]
+}
+
+const { slug } = Astro.params
+const theme = Astro.url.searchParams.get('theme') === 'light' ? 'light' : 'dark'
+const ids = Object.keys(COVERS)
+const readTimes = Object.fromEntries(
+  await Promise.all(ids.map(async (id) => [id, await getPostReadingTime(id)])),
+)
+---
+
+<!doctype html>
+<html lang="en" data-theme={theme}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <title>Covers</title>
+    <style is:global>
+      /* Block until Geist loads so screenshots never use a fallback font */
+      @font-face {
+        font-family: 'Geist Render';
+        src: url('/fonts/GeistVF.woff2') format('woff2-variations');
+        font-weight: 100 900;
+        font-display: block;
+      }
+      @font-face {
+        font-family: 'Geist Mono Render';
+        src: url('/fonts/GeistMonoVF.woff2') format('woff2-variations');
+        font-weight: 100 900;
+        font-display: block;
+      }
+      .cv {
+        --cv-sans: 'Geist Render', sans-serif;
+        --cv-mono: 'Geist Mono Render', monospace;
+      }
+      body {
+        margin: 0;
+      }
+      .og {
+        width: 1200px;
+      }
+      .sheet {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 24px;
+        padding: 24px;
+        font-family: 'Geist Mono Render', monospace;
+        font-size: 12px;
+        color: var(--muted-foreground);
+      }
+      .sheet figure {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .sheet .cv {
+        border-radius: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    {
+      slug ? (
+        <div class="og">
+          <Cover
+            id={slug}
+            theme={theme}
+            ratio={1200 / 630}
+            readTime={readTimes[slug]}
+          />
+        </div>
+      ) : (
+        <div class="sheet">
+          {ids.map((id) => (
+            <>
+              <figure>
+                <Cover id={id} bare />
+                <figcaption>{id} · bare</figcaption>
+              </figure>
+              <figure>
+                <Cover id={id} ratio={1200 / 630} readTime={readTimes[id]} />
+                <figcaption>{id} · social</figcaption>
+              </figure>
+            </>
+          ))}
+        </div>
+      )
+    }
+  </body>
+</html>

@@ -1,197 +1,407 @@
 ---
-import BlogCard from '@/components/BlogCard.astro'
-import Link from '@/components/Link.astro'
+import Cover from '@/components/Cover.astro'
 import PageHead from '@/components/PageHead.astro'
+import Timeline from '@/components/Timeline.astro'
+import { SITE, SOCIAL_LINKS } from '@/consts'
 import Layout from '@/layouts/Layout.astro'
-import { Icon } from 'astro-icon/components'
-import { getAllPosts, groupPostsByYear, getCombinedReadingTime } from '@/lib/data-utils'
-import { SOCIAL_LINKS, ICON_MAP, SITE } from '@/consts'
-import type { SocialLink } from '@/types'
+import { getAllPosts, getPostReadingTime } from '@/lib/data-utils'
+import { getPostTopic, shortReadTime } from '@/lib/topics'
 
-// Get all posts
 const allPosts = await getAllPosts()
 
-// Get featured posts (posts with featured: true in frontmatter)
-const featuredPosts = allPosts.filter(post => post.data.featured).slice(0, 4)
+const featuredPosts = await Promise.all(
+  allPosts
+    .filter((post) => post.data.featured)
+    .slice(0, SITE.featuredPostCount)
+    .map(async (post) => ({
+      post,
+      topic: getPostTopic(post),
+      readTime: shortReadTime(await getPostReadingTime(post.id)),
+    })),
+)
+const pad = (n: number) => String(n).padStart(2, '0')
 
-// Get recent posts for the main list, grouped by year
-const recentPosts = allPosts.slice(0, 10)
-const postsByYear = groupPostsByYear(recentPosts)
-const years = Object.keys(postsByYear).sort((a, b) => parseInt(b) - parseInt(a))
+const latest = allPosts[0]
 
-// Person Schema for homepage SEO
+const orbit = [
+  { label: 'agentic coding', x: '50%', y: '0%', hot: true },
+  { label: 'distributed systems', x: '88%', y: '78%' },
+  { label: 'engineering teams', x: '14%', y: '76%' },
+]
+
+const heroDescription =
+  'Putting AI agents to work in engineering teams: agentic coding, distributed systems, and the teams that ship them.'
+
 const personSchema = {
-  "@context": "https://schema.org",
-  "@type": "Person",
-  "name": SITE.title,
-  "url": SITE.href,
-  "description": SITE.description
+  '@context': 'https://schema.org',
+  '@type': 'Person',
+  name: SITE.title,
+  url: SITE.href,
+  description: SITE.description,
 }
 
-// Website Schema
 const websiteSchema = {
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  "name": SITE.title,
-  "url": SITE.href,
-  "description": SITE.description,
-  "publisher": {
-    "@type": "Organization",
-    "name": SITE.title,
-    "url": SITE.href,
-    "logo": {
-      "@type": "ImageObject",
-      "url": `${SITE.href}/content/images/2024/06/avatar-1.png`,
-      "width": 60,
-      "height": 60
-    }
-  }
+  '@context': 'https://schema.org',
+  '@type': 'WebSite',
+  name: SITE.title,
+  url: SITE.href,
+  description: SITE.description,
+  publisher: {
+    '@type': 'Organization',
+    name: SITE.title,
+    url: SITE.href,
+    logo: {
+      '@type': 'ImageObject',
+      url: `${SITE.href}/content/images/2024/06/avatar-1.png`,
+      width: 60,
+      height: 60,
+    },
+  },
 }
-
 ---
-<Layout class="max-w-4xl" transition:persist="home-layout">
+
+<Layout flush>
   <PageHead slot="head" title={SITE.title} fullTitle={true} />
-  
-  <!-- Schema Markup for SEO -->
-  <script is:inline type="application/ld+json" set:html={JSON.stringify(personSchema)} />
-  <script is:inline type="application/ld+json" set:html={JSON.stringify(websiteSchema)} />
-  
-  <!-- Hero Section -->
-  <section class="py-12 sm:py-16">
-    <div class="flex flex-col items-center text-center gap-6">
-      <!-- Avatar -->
-      <img
-        src="/content/images/2024/06/avatar-1.png"
-        alt="Jack Klimov"
-        class="w-24 h-24 rounded-full"
-      />
-      <div>
-        <h1 class="text-xl sm:text-2xl font-bold mb-2">{SITE.title}</h1>
-        <p class="text-sm sm:text-base text-muted-foreground max-w-lg">
-          {SITE.description}
+
+  <script
+    is:inline
+    type="application/ld+json"
+    set:html={JSON.stringify(personSchema)}
+  />
+  <script
+    is:inline
+    type="application/ld+json"
+    set:html={JSON.stringify(websiteSchema)}
+  />
+
+  <!-- Hero -->
+  <section class="relative">
+    <div class="hero-dots absolute inset-0" aria-hidden="true"></div>
+    <div
+      class="relative mx-auto flex max-w-[1100px] flex-wrap items-center gap-12 px-4 pt-14 pb-14 sm:px-6 sm:pt-[72px] sm:pb-[72px]"
+    >
+      <div class="flex flex-[1_1_440px] flex-col gap-5">
+        <span class="text-faint font-mono text-[12.5px] tracking-normal">
+          <span class="text-primary">●</span> software architect
+        </span>
+        <h1
+          class="text-foreground m-0 text-[44px] leading-none font-semibold tracking-[-0.045em] sm:text-[60px]"
+        >
+          {SITE.title}
+        </h1>
+        <p
+          class="text-muted-foreground m-0 max-w-[480px] text-[17px] leading-relaxed"
+        >
+          {heroDescription}
         </p>
+        <div class="mt-1 flex flex-wrap items-center gap-5">
+          {
+            latest && (
+              <a
+                href={`/blog/${latest.id}/`}
+                data-internal-link="true"
+                class="bg-foreground text-background inline-flex h-[42px] items-center gap-2 rounded-full px-5 text-sm font-semibold transition-opacity hover:opacity-85"
+              >
+                Read the latest
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12h14M13 6l6 6-6 6" />
+                </svg>
+              </a>
+            )
+          }
+          <div class="flex gap-[18px] font-mono text-[13px] tracking-normal">
+            {
+              SOCIAL_LINKS.map(({ href, label }) => (
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-foreground hover:text-primary transition-colors"
+                >
+                  {label.toLowerCase()} <span class="text-faint">↗</span>
+                </a>
+              ))
+            }
+          </div>
+        </div>
       </div>
-      <!-- Social Links -->
-      <ul class="flex flex-wrap items-center justify-center gap-2" role="list">
-        {SOCIAL_LINKS.map(({ href, label }: SocialLink) => (
-          <li>
-            <Link
-              href={href}
-              aria-label={label}
-              title={label}
-              class="inline-flex items-center gap-1.5 text-xs text-muted-foreground/60 hover:text-muted-foreground transition-colors border border-border/50 rounded-full px-3 py-1"
-              external={href.startsWith('http') || href.startsWith('mailto:')}
-            >
-              <Icon
-                name={
-                  ICON_MAP[label as keyof typeof ICON_MAP] ||
-                  'lucide:message-circle-question'
-                }
-                class="size-3.5"
-              />
-              {label}
-            </Link>
-          </li>
-        ))}
-      </ul>
+
+      <div class="flex flex-[0_1_340px] justify-center">
+        <div
+          class="relative grid size-[320px] origin-center scale-[0.86] place-items-center font-mono text-xs tracking-normal sm:scale-100"
+        >
+          <span
+            class="border-dashed-color absolute inset-0 rounded-full border border-dashed"
+          ></span>
+          <span class="border-border absolute inset-14 rounded-full border"
+          ></span>
+          <img
+            src="/content/images/2024/06/avatar-1.png"
+            alt={SITE.title}
+            width="112"
+            height="112"
+            class="orbit-avatar block size-28 rounded-full object-cover"
+          />
+          {
+            orbit.map((o) => (
+              <span
+                class:list={[
+                  'bg-surface absolute inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-[7px] rounded-full border px-[11px] py-1.5 whitespace-nowrap',
+                  o.hot
+                    ? 'border-primary text-foreground'
+                    : 'border-border text-muted-foreground',
+                ]}
+                style={`left: ${o.x}; top: ${o.y}`}
+              >
+                <span
+                  class:list={[
+                    'size-1.5 rounded-full',
+                    o.hot ? 'bg-primary' : 'bg-faint',
+                  ]}
+                />
+                {o.label}
+              </span>
+            ))
+          }
+        </div>
+      </div>
     </div>
   </section>
 
-  <!-- Featured Articles Section (full width) -->
-  {featuredPosts && featuredPosts.length > 0 && (
-    <section class="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen px-4 sm:px-6 lg:px-8 mb-12">
-      <div class="max-w-6xl mx-auto">
-        <h2 class="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-4">Featured articles</h2>
-        <hr class="border-border mb-6" />
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {featuredPosts.map(async (post) => {
-            const imageData = post.data.image
-            const imageSrc = imageData?.startsWith('http')
-              ? imageData
-              : imageData || '/og-default.png'
-            const readTime = await getCombinedReadingTime(post.id)
-            const primaryTag = post.data.tags?.[0]
-            return (
-              <article class="group">
-                <Link
-                  href={`/blog/${post.id}/`}
-                  class="block"
-                >
-                  <div class="tilt-card mb-3" style="perspective: 500px;">
-                    <div class="aspect-[16/10] overflow-hidden rounded-lg bg-muted will-change-transform">
-                      <img
-                        src={imageSrc}
-                        alt={post.data.title}
-                        class="w-full h-full object-cover"
-                        loading="lazy"
-                      />
+  <!-- Featured rail -->
+  {
+    featuredPosts.length > 0 && (
+      <section class="pt-4 pb-20" data-rail>
+        <div class="mx-auto mb-[22px] flex max-w-[1100px] items-center gap-3.5 px-4 font-mono text-xs tracking-normal sm:px-6">
+          <h2 class="text-faint m-0 font-normal">
+            <span class="text-primary">01</span> / featured
+          </h2>
+          <span class="bg-border h-px flex-1" />
+          <span class="text-faint" data-rail-count>
+            01 — {pad(featuredPosts.length)}
+          </span>
+          <div class="flex gap-2">
+            <button
+              type="button"
+              aria-label="Previous featured post"
+              data-rail-prev
+              class="rail-btn"
+              disabled
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="m15 6-6 6 6 6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              aria-label="Next featured post"
+              data-rail-next
+              class="rail-btn"
+            >
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                aria-hidden="true"
+              >
+                <path d="m9 6 6 6-6 6" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="mx-auto max-w-[1100px] px-4 sm:px-6">
+          <ul
+            class="rail-track m-0 flex list-none gap-[18px] p-0"
+            data-rail-track
+          >
+            {featuredPosts.map(({ post, topic, readTime }, i) => (
+              <li class="w-[440px] max-w-[82vw] flex-none snap-start">
+                <article class="h-full">
+                  <a
+                    href={`/blog/${post.id}/`}
+                    data-internal-link="true"
+                    class="group border-border bg-surface hover:border-strong flex h-full flex-col gap-4 rounded-[18px] border p-2 pb-5 transition-colors"
+                  >
+                    <div class="overflow-hidden rounded-xl">
+                      <Cover id={post.id} bare />
                     </div>
-                  </div>
-                  <h3 class="font-semibold text-sm leading-snug group-hover:text-accent-foreground dark:group-hover:text-primary transition-colors line-clamp-3">
-                    {post.data.title}
-                  </h3>
-                  <p class="text-xs text-muted-foreground/60 mt-1">
-                    {readTime}{primaryTag && ` · ${primaryTag}`}
-                  </p>
-                </Link>
-              </article>
-            )
-          })}
+                    <div class="grid grid-cols-[36px_minmax(0,1fr)] gap-2 px-3">
+                      <span
+                        class:list={[
+                          'pt-[3px] font-mono text-[12.5px] tracking-normal',
+                          i === 0 ? 'text-primary' : 'text-faint',
+                        ]}
+                      >
+                        {pad(i + 1)}
+                      </span>
+                      <div class="flex flex-col gap-1.5">
+                        <h3 class="text-foreground group-hover:text-primary m-0 text-[17px] leading-[1.35] font-medium tracking-[-0.015em] transition-colors">
+                          {post.data.title}
+                        </h3>
+                        <p class="text-muted-foreground m-0 line-clamp-2 text-[13.5px] leading-normal">
+                          {post.data.description}
+                        </p>
+                        <span class="text-faint font-mono text-[11.5px] tracking-normal">
+                          {readTime} · {topic}
+                        </span>
+                      </div>
+                    </div>
+                  </a>
+                </article>
+              </li>
+            ))}
+          </ul>
         </div>
-      </div>
-    </section>
-  )}
+      </section>
+    )
+  }
 
-  <!-- Recent Posts Section -->
-  <section>
-    {years.map((year) => (
-      <div class="flex flex-col">
-        <div class="text-muted-foreground text-xs font-semibold uppercase tracking-wider mb-2 mt-14 first:mt-4 pb-2 border-b border-border/50">
-          {year}
-        </div>
-        <ul class="flex flex-col">
-          {postsByYear[year].map((post) => (
-            <li>
-              <BlogCard entry={post} />
-            </li>
-          ))}
-        </ul>
-      </div>
-    ))}
-  </section>
-
-  <!-- Read More -->
-  <div class="pt-10 pb-4 flex justify-center">
-    <a
-      href="/blog"
-      class="inline-flex items-center gap-2 rounded-full border border-border px-6 py-3 text-sm font-medium text-foreground/80 hover:text-foreground hover:border-foreground/40 transition-colors"
-    >
-      Read More
-      <Icon name="lucide:arrow-right" class="size-4" />
-    </a>
+  <!-- Writing -->
+  <div class="mx-auto w-full max-w-[900px] px-4 pb-24 sm:px-6">
+    <Timeline posts={allPosts} filter limit={SITE.postsPerPage} />
   </div>
-
 </Layout>
 
+<style>
+  .hero-dots {
+    background-image: radial-gradient(var(--dot) 1px, transparent 1.5px);
+    background-size: 20px 20px;
+    mask-image: radial-gradient(
+      ellipse 40% 80% at 75% 50%,
+      #000 20%,
+      transparent 75%
+    );
+  }
+
+  @media (max-width: 860px) {
+    .hero-dots {
+      mask-image: radial-gradient(
+        ellipse 70% 40% at 50% 75%,
+        #000 20%,
+        transparent 75%
+      );
+    }
+  }
+
+  .border-dashed-color {
+    border-color: var(--dashed);
+  }
+
+  .orbit-avatar {
+    box-shadow:
+      0 0 0 6px var(--background),
+      0 0 0 7px var(--border);
+  }
+
+  .rail-track {
+    position: relative;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    margin-right: calc(50% - 50vw);
+    padding-right: 24px;
+  }
+
+  .rail-track::-webkit-scrollbar {
+    display: none;
+  }
+
+  .rail-btn {
+    width: 40px;
+    height: 40px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    border: 1px solid var(--strong);
+    background: var(--surface);
+    color: var(--foreground);
+    cursor: pointer;
+    transition:
+      color 0.15s,
+      border-color 0.15s,
+      background 0.15s;
+  }
+
+  .rail-btn:disabled {
+    border-color: var(--border);
+    background: transparent;
+    color: var(--faint);
+    cursor: default;
+  }
+</style>
+
 <script>
-  document.querySelectorAll<HTMLElement>('.tilt-card').forEach((card) => {
-    const inner = card.firstElementChild as HTMLElement
-    const maxTilt = 15
+  function initRail() {
+    const root = document.querySelector<HTMLElement>(
+      '[data-rail]:not([data-bound])',
+    )
+    if (!root) return
+    root.dataset.bound = 'true'
+    const track = root.querySelector<HTMLElement>('[data-rail-track]')!
+    const prev = root.querySelector<HTMLButtonElement>('[data-rail-prev]')!
+    const next = root.querySelector<HTMLButtonElement>('[data-rail-next]')!
+    const count = root.querySelector<HTMLElement>('[data-rail-count]')!
+    const cards = Array.from(track.children) as HTMLElement[]
+    const pad = (n: number) => String(n).padStart(2, '0')
 
-    card.addEventListener('mouseenter', () => {
-      inner.style.transition = 'none'
-    })
+    const current = () => {
+      const left = track.scrollLeft
+      let best = 0
+      cards.forEach((c, i) => {
+        if (
+          Math.abs(c.offsetLeft - left) <
+          Math.abs(cards[best].offsetLeft - left)
+        )
+          best = i
+      })
+      return best
+    }
 
-    card.addEventListener('mousemove', (e) => {
-      const rect = card.getBoundingClientRect()
-      const x = (e.clientX - rect.left) / rect.width - 0.5
-      const y = (e.clientY - rect.top) / rect.height - 0.5
-      inner.style.transform = `rotateX(${-y * maxTilt}deg) rotateY(${x * maxTilt}deg)`
-    })
+    const update = () => {
+      const i = current()
+      const atEnd =
+        track.scrollLeft + track.clientWidth >= track.scrollWidth - 4
+      count.textContent = `${pad(i + 1)} — ${pad(cards.length)}`
+      prev.disabled = track.scrollLeft <= 4
+      next.disabled = atEnd
+    }
 
-    card.addEventListener('mouseleave', () => {
-      inner.style.transition = 'transform 0.3s ease-out'
-      inner.style.transform = ''
+    const go = (dir: number) => {
+      const i = Math.max(0, Math.min(cards.length - 1, current() + dir))
+      track.scrollTo({ left: cards[i].offsetLeft, behavior: 'smooth' })
+    }
+
+    prev.addEventListener('click', () => go(-1))
+    next.addEventListener('click', () => go(1))
+    track.addEventListener('scroll', () => requestAnimationFrame(update), {
+      passive: true,
     })
-  })
+    window.addEventListener('resize', update)
+    update()
+  }
+
+  initRail()
+  document.addEventListener('astro:page-load', initRail)
 </script>

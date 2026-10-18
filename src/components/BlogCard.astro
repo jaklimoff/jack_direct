@@ -1,69 +1,40 @@
 ---
-import {
-  getCombinedReadingTime,
-  getSubpostCount,
-  isSubpost,
-} from '@/lib/data-utils'
-import { formatDate } from '@/lib/utils'
-import { Icon } from 'astro-icon/components'
+import { getPostReadingTime } from '@/lib/data-utils'
+import { getPostTopic, shortReadTime, topicColor } from '@/lib/topics'
 import type { CollectionEntry } from 'astro:content'
-import Link from './Link.astro'
 
 interface Props {
   entry: CollectionEntry<'blog'>
 }
 
 const { entry } = Astro.props
-const formattedDate = formatDate(entry.data.date)
-const readTime = await getCombinedReadingTime(entry.id)
-const subpostCount = !isSubpost(entry.id) ? await getSubpostCount(entry.id) : 0
+const topic = getPostTopic(entry)
+const readTime = shortReadTime(await getPostReadingTime(entry.id))
+const date = entry.data.date.toLocaleDateString('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+})
 ---
 
-<Link
+<a
   href={`/${entry.collection}/${entry.id}/`}
-  class="group block py-5 transition-all duration-200 hover:bg-muted/30 -mx-3 px-3 rounded-md"
+  data-internal-link="true"
+  class="group flex flex-col gap-[5px] py-3.5"
 >
-  <div class="flex items-start justify-between gap-4">
-    <div class="flex-1 min-w-0 space-y-1">
-      <div class="flex items-baseline gap-2.5">
-        <h3 class="text-base font-semibold leading-snug group-hover:text-accent-foreground dark:group-hover:text-primary transition-colors">
-          {entry.data.title}
-        </h3>
-        <span class="text-muted-foreground/60 text-xs font-normal whitespace-nowrap shrink-0">
-          {formattedDate}
-        </span>
-      </div>
-      <p class="text-muted-foreground text-sm leading-snug line-clamp-1">
-        {entry.data.description}
-      </p>
-      <div class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground/70">
-        <span class="flex items-center gap-1">
-          <Icon name="lucide:clock" class="size-3 text-primary/70" />
-          {readTime}
-        </span>
-        {
-          subpostCount > 0 && (
-            <>
-              <span class="text-muted-foreground/40">·</span>
-              <span class="flex items-center gap-1">
-                <Icon name="lucide:file-text" class="size-3" />
-                {subpostCount}
-              </span>
-            </>
-          )
-        }
-        {
-          entry.data.tags && entry.data.tags.length > 0 && (
-            <>
-              <span class="text-muted-foreground/40">·</span>
-              <span class="text-muted-foreground/50">
-                {entry.data.tags.slice(0, 2).join(', ')}
-                {entry.data.tags.length > 2 && ` +${entry.data.tags.length - 2}`}
-              </span>
-            </>
-          )
-        }
-      </div>
-    </div>
-  </div>
-</Link>
+  <span class="text-faint font-mono text-[11.5px] tracking-normal">
+    <time datetime={entry.data.date.toISOString()}>{date}</time> ·
+    <span style={`color: ${topicColor(topic)}`}>{topic}</span> · {readTime}
+  </span>
+  <h3
+    class="text-foreground group-hover:text-primary m-0 text-[16.5px] leading-[1.4] font-medium tracking-[-0.012em] transition-colors"
+  >
+    {entry.data.title}
+  </h3>
+  <p
+    class="text-muted-foreground m-0 line-clamp-1 text-[13.5px] leading-normal"
+  >
+    {entry.data.description}
+  </p>
+</a>

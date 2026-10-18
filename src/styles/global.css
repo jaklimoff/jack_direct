@@ -3,8 +3,12 @@
 @custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
 
 @theme inline {
-  --font-sans: Geist, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
-  --font-mono: Geist Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  --font-sans:
+    Geist, ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji',
+    'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+  --font-mono:
+    Geist Mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    'Liberation Mono', 'Courier New', monospace;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -22,6 +26,10 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-ring: var(--ring);
+  --color-surface: var(--surface);
+  --color-faint: var(--faint);
+  --color-strong: var(--strong);
+  --color-dashed: var(--dashed);
 }
 
 @font-face {
@@ -41,52 +49,91 @@
 }
 
 :root {
-  --background: hsl(0 0% 100%);
-  --header-background: hsl(0 0% 98%);
-  --foreground: hsl(0 0% 9%);
-  --primary: hsl(328 100% 77%);
-  --primary-foreground: hsl(0 0% 9%);
-  --secondary: hsl(0 0% 96%);
-  --secondary-foreground: hsl(0 0% 9%);
-  --muted: hsl(0 0% 96%);
-  --muted-foreground: hsl(0 0% 45%);
-  --accent: hsl(328 100% 97%);
-  --accent-foreground: hsl(328 100% 30%);
+  /* Timeline palette (light) */
+  --background: #f7f7f5;
+  --header-background: #f7f7f5;
+  --surface: #ffffff;
+  --foreground: #111214;
+  --primary: #4f5bd5;
+  --primary-foreground: #ffffff;
+  --secondary: #efefec;
+  --secondary-foreground: #111214;
+  --muted: #efefec;
+  --muted-foreground: #5c6068;
+  --faint: #80848c;
+  --accent: color-mix(in srgb, #4f5bd5 10%, transparent);
+  --accent-foreground: #4f5bd5;
   --additive: hsl(112 50% 36%);
   --additive-foreground: hsl(0 0% 9%);
   --destructive: hsl(0 84.2% 60.2%);
   --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(0 0% 90%);
-  --ring: hsl(328 100% 77%);
+  --border: #e4e4e0;
+  --strong: #cfcfca;
+  --dashed: #d9d9d4;
+  --dot: rgba(17, 18, 20, 0.11);
+  --ring: #4f5bd5;
+
+  /* Topic colors */
+  --topic-claude-code: var(--primary);
+  --topic-agents: #c2366b;
+  --topic-protocols: #0f7f52;
+  --topic-databases: #0a72ad;
+  --topic-rust: #c2410c;
+  --topic-python: #a16207;
+  --topic-solidity: #8e3fb8;
+  --topic-management: #c2366b;
 }
 
 [data-theme='dark'] {
-  --background: hsl(240 21% 14.9%);
-  --header-background: hsl(240 21% 11%);
-  --foreground: hsl(0 0% 95%);
-  --primary: hsl(328 100% 77%);
-  --primary-foreground: hsl(0 0% 9%);
-  --secondary: hsl(220 12% 22%);
-  --secondary-foreground: hsl(0 0% 98%);
-  --muted: hsl(220 12% 22%);
-  --muted-foreground: hsl(0 0% 70%);
-  --accent: hsl(328 100% 20%);
-  --accent-foreground: hsl(328 100% 85%);
+  --background: #0c0c0e;
+  --header-background: #0c0c0e;
+  --surface: #131316;
+  --foreground: #f2f2f3;
+  --primary: #8b8fff;
+  --primary-foreground: #0c0c0e;
+  --secondary: #1a1a1e;
+  --secondary-foreground: #f2f2f3;
+  --muted: #1a1a1e;
+  --muted-foreground: #9a9da5;
+  --faint: #6e727a;
+  --accent: color-mix(in srgb, #8b8fff 14%, transparent);
+  --accent-foreground: #8b8fff;
   --additive: hsl(112 50% 36%);
   --additive-foreground: hsl(0 0% 9%);
   --destructive: hsl(0 62.8% 30.6%);
   --destructive-foreground: hsl(0 0% 98%);
-  --border: hsl(220 12% 26%);
-  --ring: hsl(328 100% 77%);
+  --border: #222226;
+  --strong: #34343a;
+  --dashed: #2c2c31;
+  --dot: rgba(255, 255, 255, 0.08);
+  --ring: #8b8fff;
+
+  --topic-agents: #ff8fc4;
+  --topic-protocols: #4cc38a;
+  --topic-databases: #5bb8f5;
+  --topic-rust: #ff8a4c;
+  --topic-python: #e3b341;
+  --topic-solidity: #d08cff;
+  --topic-management: #ff8fc4;
 }
 
 @layer base {
-  *, ::after, ::before, ::backdrop, ::file-selector-button {
-    @apply border-border outline-ring/50 tracking-tight;
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    @apply border-border outline-ring/50;
   }
 
   html {
     @apply bg-background text-foreground scheme-light;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    overflow-x: clip;
   }
 
   html[data-theme='dark'] {
@@ -100,7 +147,12 @@
   }
 
   /* Ensure stable font rendering to prevent layout shifts */
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-variant-ligatures: none;
     text-rendering: optimizeLegibility;
   }
@@ -116,9 +168,9 @@
   /* Enhanced focus indicators for accessibility */
   /* Only apply to links that don't have custom focus styles */
   a:focus-visible:not([class*='focus-visible']):not([class*='ring']) {
-    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+    @apply ring-ring ring-offset-background ring-2 ring-offset-2 outline-none;
   }
-  
+
   /* Remove default browser outline - components handle their own focus styles */
   button:focus,
   input:focus,
@@ -126,17 +178,17 @@
   select:focus {
     outline: none;
   }
-  
+
   /* Remove all default input styling that might cause visible rectangles */
-  input[type="text"],
-  input[type="search"] {
+  input[type='text'],
+  input[type='search'] {
     border: none !important;
     outline: none !important;
     box-shadow: none !important;
   }
-  
-  input[type="text"]:not(:focus-visible),
-  input[type="search"]:not(:focus-visible) {
+
+  input[type='text']:not(:focus-visible),
+  input[type='search']:not(:focus-visible) {
     border: none !important;
     outline: none !important;
     box-shadow: none !important;
@@ -165,7 +217,6 @@
     clip: auto;
     white-space: normal;
   }
-
 }
 
 /* Tech badge - minimal styles to avoid conflicts with Framer Motion */
@@ -179,7 +230,6 @@
   opacity: 1;
 }
 
-
 /* Safe area support for mobile devices (notch, home indicator) */
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0.75rem);
@@ -188,4 +238,3 @@
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0.75rem);
 }
-
