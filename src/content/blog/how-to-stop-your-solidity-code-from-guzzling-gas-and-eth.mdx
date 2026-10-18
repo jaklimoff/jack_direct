@@ -1,7 +1,8 @@
 ---
-title: "How to Stop Your Solidity Code from Guzzling Gas (and ETH!)"
-description: "Solidity gas optimization tips: pick the right data structures, tame loops, pack variables, and reuse libraries so your contracts burn less gas and ETH."
+title: "Solidity Gas Optimization: What Saves Gas and What's Folklore"
+description: "Solidity gas optimization measured on solc 0.8.37: storage caching, calldata, custom errors, immutable, transient storage, optimizer settings, and the myths."
 date: 2024-06-18
+updated: 2026-10-18
 image: /content/images/covers/how-to-stop-your-solidity-code-from-guzzling-gas-and-eth.png
 authors:
   - jack-klimov
@@ -12,75 +13,195 @@ tags:
 featured: true
 ---
 
-So, you've dipped your toes into the wild world of blockchain and built your first smart contract with Solidity. Kudos! But before you pop the champagne and start minting NFTs like there's no tomorrow, let's talk about something crucial: **gas optimization**.
+The first version of this post got several things wrong, and two of them are classics. View functions "don't consume any gas when called externally": they do, the moment another contract calls them. Unsigned integers "take up less space and are cheaper": they're the same 32 bytes, and in the case where uints did win in my tests, it was for a different reason. Most gas advice is like that. It gets repeated because it sounds right, not because somebody measured it.
 
-Think of gas as the fuel that powers your smart contract on the Ethereum network. Every line of code, every function call, every little calculation — it all needs gas to run. And just like in the real world, gas is not free. In fact, high gas fees can seriously eat into your profits (and your sanity :) ).
+So this time I measured. Every number below comes from a real transaction, and the tricks that save nothing are marked as such.
 
-That's where gas optimization comes in. It's the art of writing smart contracts that are lean and efficient, so they consume less gas and save you precious ETH or whatever you pay for it.
+## Where Does Gas Actually Go in a Solidity Contract?
 
-## Why Should You Care About Gas Optimization?
+Think of gas as an itemized bill. Every opcode is a line item, and the transaction receipt shows the total. Most gas tips argue over the bread basket, when the expensive items are a short list. These are the current mainnet prices:
 
-Imagine this: you've created an awesome decentralized app (DApp) that everyone's raving about. But then, users start complaining about exorbitant transaction fees. Suddenly, your dream DApp becomes too expensive to use, and people lose interest. Ouch.
+| Line item | Gas | Source |
+|---|---|---|
+| Write a non-zero value to an empty storage slot | 20,000 (+2,100 if cold) | EIP-2200, EIP-2929 |
+| First read of a storage slot in a transaction | 2,100 | EIP-2929 |
+| Later reads of the same slot | 100 | EIP-2929 |
+| First touch of another contract's address | 2,600 | EIP-2929 |
+| `TSTORE` / `TLOAD` (transient storage) | 100 | EIP-1153 |
+| Event: base + per topic + per byte of data | 375 + 375 + 8 | Yellow Paper |
+| Calldata, per non-zero / zero byte | 16 / 4 (floor 40 / 10 for data-heavy txs) | EIP-2028, EIP-7623 |
+| `ADD`, `LT`, `MUL`, `DIV`, `SDIV` | 3 to 5 | Yellow Paper |
 
-Optimizing your Solidity code for gas efficiency isn't just about saving a few bucks… it's about:
+Read that table once and most of this post follows from it. Storage is the steak. Arithmetic is tap water. A loop that reads the same storage slot 100 times pays 2,100 once and 100 for each read after that, while the `ADD` inside the loop costs 3. Shaving arithmetic while you hit storage is optimizing the wrong line.[^1]
 
-* **Accessibility:** Lower gas fees make your dApp more accessible to a wider audience.
-* **Sustainability:** Less gas consumption means a smaller carbon footprint for your project.
-* **User Experience:** Nobody likes waiting for slow and expensive transactions. Gas optimization makes your dApp snappier and more enjoyable to use.
+## How Did I Measure These Numbers?
 
-## Solidity Gas Optimization: Let's Get Technical (But Not Too Technical)
+I compiled each contract with solc 0.8.37 (optimizer on, 200 runs, legacy pipeline, the setup most projects ship with) and ran signed transactions in an in-memory EVM (`@ethereumjs/vm` 10.1.3, Prague rules). Each comparison gets a fresh contract plus one warm-up call before the measured one, so a first write to an empty slot doesn't skew anything. The numbers are receipt `gasUsed`, which includes the 21,000 base cost and calldata, after refunds.
 
-Don't worry, this isn't going to be a dry and boring lecture on assembly code. We'll stick to practical tips that even beginner Solidity developers can understand and implement.
+Here's the whole bill in one table. The sections after it explain each line.
 
-### 1. Data Structures: Choose Wisely, My Friend
+| Technique | Before | After | Saved |
+|---|---|---|---|
+| Cache storage reads in a 100-item loop | 321,381 | 280,347 | 41,034 |
+| Emit an event instead of storing a 32-byte record | 44,141 | 23,411 | 20,730 |
+| `calldata` instead of `memory` for a 100-item array | 64,402 | 56,860 | 7,542 |
+| `immutable` instead of a storage variable (one read) | 25,588 | 23,519 | 2,069 |
+| `ReentrancyGuardTransient` instead of `ReentrancyGuard` | 28,686 | 26,781 | 1,905 |
+| Custom error instead of a revert string (failing call) | 21,367 | 21,266 | 101 |
+| Manual `unchecked { ++i; }` in a 1,000-step loop | 146,672 | 146,650 | 22 |
 
-* **Arrays:** Avoid unnecessary array resizing. Pre-allocate memory if you know the size beforehand. Remember, pushing data into a dynamically sized array is like trying to fit an elephant into a Mini Cooper — it's gonna cost you!
-* **Mappings:** Use mappings whenever possible. They're like hash tables, offering super-fast lookups and saving you gas compared to iterating through arrays to find what you need.
+## Which Solidity Gas Optimizations Are Worth It?
 
-### 2. Loops: The Bane of Gas-Guzzlers
+### Cache storage reads in local variables
 
-* **Minimize Loop Iterations:** Keep those loops tight! The fewer times you have to loop, the less gas you'll burn. If you're looping to send ETH to a list of addresses, switch to the [pull over push pattern](/blog/pull-over-push-pattern-in-solidity/).
-* **Don't Loop What You Can Calculate:** If you can calculate a value directly instead of looping to find it, do it! Your gas tank will thank you.
+This is the biggest line on the bill that you control directly. The naive loop reads `arr.length`, `fee`, and `total` from storage on every pass and writes `total` back every time:
 
-### 3. Functions: Short, Sweet, and Gas-Efficient
+```solidity
+// 321,381 gas for 100 items: storage on every iteration
+for (uint256 i; i < arr.length; ++i) total += arr[i] * fee;
 
-* **Internal vs. External:** Use `internal` functions whenever possible. They're only callable from within the contract and are cheaper than `external` functions.
-* **Pure vs. View:** If a function doesn't modify the blockchain state, declare it as `view` (for reading data) or `pure` (for calculations only). These functions don't consume any gas when called externally.
+// 280,347 gas: read once, work in memory, write once
+uint256 len = arr.length;
+uint256 f = fee;
+uint256 t = total;
+for (uint256 i; i < len; ++i) t += arr[i] * f;
+total = t;
+```
 
-### 4. Variables: Pack 'Em In Like Sardines
+Warm reads cost 100 each, so this saves about 400 gas per iteration, not thousands. It adds up anyway: 41,034 gas over 100 items, 12.8% of the transaction. Slither flags the `arr.length` case with its `cache-array-length` detector.[^2]
 
-* **Variable Packing:** Solidity allows you to pack multiple variables into a single storage slot. This might sound like some black magic, but [storage slot packing](/blog/understanding-variable-types-in-solidity/#how-does-storage-slot-packing-save-gas) is a legit way to save gas on storage.
-* **Use Unsigned Integers:** When you know a value will always be positive, use a `uint` instead of an `int`. Unsigned integers take up less space and are cheaper to work with.
+### Use calldata for array and struct parameters you don't modify
 
-### 5. Libraries: Don't Reinvent the Wheel
+A `memory` parameter makes the contract copy the whole array out of calldata before your code even starts. `calldata` reads it in place. Summing 100 `uint256`s cost 64,402 gas with `public` and `memory`, and 56,860 with `external` and `calldata`. That's a 7,542 gas difference, and it grows with the array.
 
-* **Leverage Existing Libraries:** Chances are, someone has already solved a problem you're facing. Use well-tested and optimized libraries to save time and gas.
+This is where the old "external is cheaper than public" advice comes from, and the advice has the cause wrong. Visibility isn't the lever. A `public` function can take `calldata` parameters too (since Solidity 0.6.9), and then it costs the same: 56,860 gas, to the unit. For non-array arguments, visibility makes no difference at all, as the myths section shows.
 
-## FAQs: Your Burning Gas Optimization Questions, Answered
+### Replace revert strings with custom errors
 
-**1. What is the most important thing to remember about gas optimization?**
+```solidity
+error NotOwner();
 
-Keep it simple! The more complex your code, the more gas it will consume. Write clean, concise, and readable code, and you'll be on the right track.
+// 21,367 gas when it reverts, and the string sits in your bytecode
+require(msg.sender == owner, "Ownable: caller is not the owner");
 
-**2. How can I estimate the gas cost of my Solidity code?**
+// 21,266 gas, and the error is a 4-byte selector
+if (msg.sender != owner) revert NotOwner();
+require(msg.sender == owner, NotOwner()); // 0.8.27+, 21,288 gas
+```
 
-Remix, the popular Solidity IDE, has a built-in gas estimator that can give you a rough idea of how much gas your code will consume. Hardhat has a special plugin called [hardhat-gas-reporter](https://www.npmjs.com/package/hardhat-gas-reporter) to measure gas consumption during tests. In Foundry you can simply run tests with the gas report flag like this: `forge test --gas-report`
+At runtime this saves about 100 gas, and only when the call fails. The deploy is where it shows up. A contract with three owner-checked functions shrank from 249 to 198 bytes of runtime code and cost 11,014 gas less to deploy. Custom errors arrived in 0.8.4, and `require(bool, Error)` works on the default pipeline since 0.8.27 (0.8.26 had it for via-IR only).[^3] There's no reason left to write a new revert string.
 
-**3. Are there any tools that can help me optimize my Solidity code?**
+### Mark values that never change as constant or immutable
 
-Yes! There are several tools available, such as:
+Reading a storage variable costs 2,100 gas the first time in a transaction. A `constant` is inlined into the bytecode at compile time, and an `immutable` gets written into the code at deploy time. In my test, one read cost 25,588 gas from storage, 23,519 as `immutable`, and 23,508 as `constant`. Slither's `constable-states` and `immutable-states` detectors find candidates for you. The details of each, including the 32 bytes every immutable reserves, are in [constant vs immutable in Solidity](/blog/understanding-variable-types-in-solidity/#when-should-you-use-constant-vs-immutable).
 
-* **Solhint:** A linter that helps you identify potential code style and security issues, some of which can impact gas efficiency. [site](https://protofire.github.io/solhint/)
-* **Mythril:** A security analysis tool that can also detect gas optimization opportunities. [git](https://github.com/ConsenSys/mythril)
+### Pack storage variables into fewer slots
 
-**4. Is gas optimization a one-time thing?**
+A new slot costs 20,000 gas to write, so two `uint128`s that share one slot halve that bill. The rules (declaration order, structs starting a fresh slot, the masking cost of small types) are in [how storage slot packing saves gas](/blog/understanding-variable-types-in-solidity/#how-does-storage-slot-packing-save-gas). I won't repeat them here.
 
-Not really. As your project evolves and you add new features, it's crucial to revisit your code and optimize for gas efficiency regularly.
+### Use transient storage for values that only live during one transaction
 
-**5. I'm a beginner. Do I really need to worry about gas optimization right now?**
+EIP-1153 shipped with Cancun (the Dencun upgrade, March 13, 2024). It adds `TSTORE` and `TLOAD` at 100 gas each, on storage that's wiped at the end of the transaction. The textbook use is a reentrancy lock, which is set and cleared within the same call anyway. Swapping OpenZeppelin's `ReentrancyGuard` for `ReentrancyGuardTransient` (in Contracts since 5.1) saved 1,905 gas per guarded call.
 
-While it's essential to understand the basics of gas optimization from the get-go, don't get bogged down by it when you're just starting. Focus on writing clean and functional code first, and then gradually incorporate optimization techniques as you gain more experience.
+Since 0.8.28 you can declare value-type state variables `transient` directly:[^4]
 
-## Gas Optimization: Your Key to a Smoother Blockchain Journey
+```solidity
+contract Router {
+    bool transient locked; // gone when the transaction ends, no refund games
 
-Optimizing your Solidity code for gas efficiency is an ongoing process, but it's a worthwhile investment that will pay dividends in the long run. By following these tips and staying up-to-date with the latest best practices, you can ensure that your DApps are accessible, sustainable, and a joy to use.
+    modifier lock() {
+        require(!locked, "reentrant");
+        locked = true;
+        _;
+        locked = false; // clear it anyway: composability footgun otherwise
+    }
+}
+```
+
+The compiler warns you about the catch, and it's right. Transient storage is cleared at the end of the transaction, not at the end of your call, so if you leave a value set, a second call into your contract in the same transaction sees it. Clear what you set.
+
+### Emit events for data no contract reads
+
+Contracts can't read events, but indexers and front ends can. If a record exists only so your UI can show history, storing it is ordering the most expensive dish on the menu for a guest who never shows up. Writing a 32-byte record to a new mapping slot cost 44,141 gas, and emitting it in an indexed event cost 23,411. That's 20,730 saved per record. The test is simple: if no contract will ever read the value, don't store it.
+
+## Which Gas Tips Are Myths?
+
+### Myth: Unsigned integers are cheaper because they take less space
+
+The reason usually given is wrong. Both `uint256` and `int256` are one 32-byte word, and the signed opcodes cost what the unsigned ones do (`SDIV` is 5 gas, same as `DIV`). Inside `unchecked`, my loop doing multiply and divide cost 29,253 gas with `uint256` and 29,209 with `int256`. A dead heat.
+
+Turn checked arithmetic back on and `int256` loses: 61,931 against 49,175, about 26% more. The overflow checks for signed multiply and divide need extra cases (like `type(int256).min / -1`), and you pay for them on every operation. So use `uint` for values that can't go negative. The real win is that you're telling the compiler the truth about the value, and the cheaper checks come along with it.
+
+### Myth: View and pure functions don't cost gas
+
+They're free only when you call them off-chain with `eth_call`, because no transaction happens. Call a view function from inside a transaction and it's billed like anything else. My test contract that read a value through another contract's `view` function paid 28,536 gas, against 23,422 for the same write with no call. The 5,114 difference is mostly the 2,600 cold address access and the 2,100 cold storage read.
+
+### Myth: Internal functions are cheaper than external ones
+
+Calling an `internal` helper cost 23,877 gas, and calling a `public` one from inside the same contract cost 23,876. Same code, same jump. (Add a few functions to the contract and those numbers drift by about 20 gas either way, because the dispatcher checks function selectors in order. That's noise, not visibility.) The cost appears when you call your own function as `this.f()`, which turns a jump into a real message call (610 more gas here, and more when the address isn't already warm), or when array arguments get copied to `memory`. Pick visibility for your API, not your gas bill.
+
+### Myth: Write `unchecked { ++i; }` in every loop
+
+This was good advice until October 2023. Solidity 0.8.22 removes the overflow check on a loop counter by itself when the loop has the form `for (uint256 i; i < n; ++i)`, even with the optimizer off.[^5] Over 1,000 iterations, the hand-written `unchecked` block saved 22 gas, and `i++` cost 22 more than `++i`. Rounding error.
+
+The check does stay when you write `i <= n`, which only `<` qualifies for. That version cost 205,714 gas against 146,672, so if you want a free 29% on a hot loop, write `<`. (Solhint's `gas-increment-by-one` and `gas-strict-inequalities` rules still flag the `++i` style. One of those two rules matters on 0.8.22+, and it's the second one.)[^6]
+
+### Myth: Optimizing gas shrinks your carbon footprint
+
+Not since the Merge on September 15, 2022. Proof of stake cut Ethereum's energy use by an estimated 99.95%, and validators don't burn more electricity because your transaction used more gas.[^7] Optimize for your users' wallets.
+
+### Myth: Gas tokens and storage refunds can pay for your transaction
+
+That trick died with London in August 2021. EIP-3529 capped refunds at one fifth of the gas a transaction uses and cut the refund for clearing a slot to 4,800.[^8] Zeroing storage you no longer need is still polite, but it won't pay for your transaction.
+
+## Do Compiler Settings Matter More Than Code Tricks?
+
+Often, yes. Here's OpenZeppelin's ERC-20 (Contracts 5.7.0), byte for byte the same source, under four compiler settings:
+
+| Setting | Deploy gas | Runtime size | `transfer` gas |
+|---|---|---|---|
+| Optimizer off | 939,742 | 3,554 B | 35,029 |
+| Optimizer on, 200 runs | 539,988 | 1,764 B | 34,465 |
+| Optimizer on, 1,000,000 runs | 653,222 | 2,300 B | 34,323 |
+| via-IR, 200 runs | 492,448 | 1,543 B | 34,092 |
+
+The `runs` value tells the optimizer how often you expect each opcode to run. A high value trades a bigger deploy for cheaper calls, and here a million runs bought 142 gas per transfer for 113,234 more at deploy. That pays off after about 800 transfers. For a token people will move millions of times, worth it. For an internal admin contract, no.
+
+The bigger lesson is the first row. With the optimizer off, my 1,000-iteration loop cost 267,865 gas instead of 146,672. If your gas report runs on unoptimized builds, you're tuning against numbers you'll never ship. That's easier to get wrong than it sounds: Hardhat 3 runs tests on its `default` build profile, which is set up for development speed, while Ignition deploys with `production`, which turns the optimizer on.[^9] Measure with the settings you deploy with.
+
+via-IR won every line in this test, but it's still opt-in. The legacy pipeline remains the default, and making via-IR the default is still on the Solidity team's roadmap.[^10] It compiles slower, and stack traces through its optimizer are harder to read. Try it, measure it, and keep it if your tests pass.
+
+## How Do Gas Limits Break Loops?
+
+A loop over an array that anyone can grow has a ceiling. Since Fusaka (December 3, 2025), EIP-7825 caps a single transaction at 16,777,216 gas, even though a block now holds 60 million.[^11] A loop that "fits in a block" can still fail to fit in a transaction, and from that day on the function can't run at all. Bound your loops or process them in batches. If the loop sends ETH, use [the pull over push pattern](/blog/pull-over-push-pattern-in-solidity/) instead. Searching an array for a value is the same problem in slow motion; that's what mappings are for.
+
+## What Changes on an L2?
+
+The bill gets a second section. On an OP Stack chain, your fee is L2 execution gas plus an L1 data fee, and the L1 part is computed from an estimate of your transaction's compressed size times Ethereum's base fee and blob base fee.[^12] Execution gas on L2 is cheap. Bytes you post to L1 are what cost money.
+
+That changes what's worth optimizing. Cold storage reads matter less on an L2 than on mainnet, and calldata size matters more: tightly packed arguments, fewer zero-padded `uint256`s where a `uint64` would do, batching several actions into one transaction. Check the fee formula of your specific chain, because Arbitrum and the ZK rollups each price data their own way.
+
+## Which Tools Measure Solidity Gas Usage?
+
+Measure before and after every change. In Foundry, `forge test --gas-report` prints a per-function table and `forge snapshot` writes a baseline you can diff in CI. Hardhat 3 has `--gas-stats` built into `npx hardhat test`, and the `hardhat-gas-reporter` plugin still works if you're on Hardhat 2. Remix shows an estimate per transaction, good enough for a quick check.
+
+For finding candidates, Slither's optimization detectors (`cache-array-length`, `constable-states`, `immutable-states`, `var-read-using-this`) catch the obvious ones in seconds. Solhint has a gas rule set too. Mythril doesn't belong on this list, although the first version of this post put it there: it's a symbolic execution tool that looks for security bugs, not gas waste.
+
+## My Take
+
+Start with storage, because that's where the money is. Cache reads, move write-only records into events, mark constants, and pack slots. Then check your compiler settings, which can beat all of that combined. Skip the micro-tricks that 0.8.22 made obsolete.
+
+And don't trust a gas tip you haven't measured. That includes this post. Run `forge test --gas-report` on your own contract before and after each change, and believe the receipt.
+
+[^1]: Prices from EIP-2929 (https://eips.ethereum.org/EIPS/eip-2929), EIP-2200 (https://eips.ethereum.org/EIPS/eip-2200), EIP-1153 (https://eips.ethereum.org/EIPS/eip-1153), EIP-2028 (https://eips.ethereum.org/EIPS/eip-2028), EIP-7623 (https://eips.ethereum.org/EIPS/eip-7623), and the opcode reference at https://www.evm.codes/
+[^2]: https://github.com/crytic/slither/wiki/Detector-Documentation
+[^3]: https://github.com/ethereum/solidity/blob/develop/Changelog.md
+[^4]: https://docs.soliditylang.org/en/latest/contracts.html#transient-storage
+[^5]: https://soliditylang.org/blog/2023/10/25/solidity-0.8.22-release-announcement
+[^6]: https://protofire.github.io/solhint/docs/rules.html
+[^7]: https://ethereum.org/roadmap/merge/
+[^8]: https://eips.ethereum.org/EIPS/eip-3529
+[^9]: https://hardhat.org/docs/guides/writing-contracts/build-profiles
+[^10]: https://www.soliditylang.org/blog/2025/10/21/the-road-to-core-solidity/
+[^11]: https://ethereum.org/roadmap/fusaka/
+[^12]: https://docs.optimism.io/stack/transactions/fees
