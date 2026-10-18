@@ -28,7 +28,7 @@ Hooks are the actual home-security system. Some are locks that refuse to open (a
 
 The official reference puts it plainly: hooks are "user-defined shell commands, HTTP endpoints, MCP tool calls, LLM prompts, or subagents that execute automatically at specific points in Claude Code's lifecycle."[^1] They sit *outside* the model. The model can't talk its way past them, and neither can a subagent (your gates apply recursively to every child context too).
 
-Claude Code has six extension layers, and they're easy to confuse. CLAUDE.md is advisory context the model reads. Slash commands and [skills](/blog/every-knob-in-a-claude-code-skill-md/) are procedural knowledge somebody invokes. Subagents are isolated child contexts that return summaries. MCP servers hand the model new tools. Plugins bundle all of that for distribution. Hooks are the only layer that's deterministic by construction.
+Claude Code has six extension layers, and they're easy to confuse. CLAUDE.md is advisory context the model reads. Slash commands and [skills](/blog/every-knob-in-a-claude-code-skill-md/) are procedural knowledge somebody invokes. Subagents are isolated child contexts that return summaries. [MCP](/blog/wild-west-of-ai-protocols/) servers hand the model new tools. Plugins bundle all of that for distribution. Hooks are the only layer that's deterministic by construction.
 
 ## When Do Hooks Actually Fire? The 33-Event Lifecycle
 

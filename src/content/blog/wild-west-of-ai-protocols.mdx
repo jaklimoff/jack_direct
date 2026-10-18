@@ -1,7 +1,8 @@
 ---
-title: "AI Agent Protocols Beyond MCP: A2A, ACP, ANP and More"
-description: "AI agent protocols beyond MCP: a tour of A2A, ANP, Agora, Agent Protocol, and other agent communication standards, and what each one is for."
+title: "MCP vs A2A: Which AI Agent Protocols Survived the Wild West"
+description: "MCP vs A2A in 2026: what each AI agent protocol does, when you need A2A, and what happened to ACP, ANP, Agora, and the rest of the 2025 protocol rush."
 date: 2025-07-01
+updated: 2026-10-18
 image: /content/images/covers/wild-west-of-ai-protocols.png
 authors:
   - jack-klimov
@@ -9,47 +10,155 @@ tags:
   - ai
   - protocols
   - agents
+  - mcp
 featured: false
 ---
 
-There are way more protocols for AI agents out there besides MCP that you might not even have heard about! Let's check out this "wild west" of agent communication together, shall we?
+In April 2025, a survey out of Shanghai Jiao Tong University mapped more than a dozen protocols for AI agents to reach tools and talk to each other.[^1] Eighteen months later, two of them carry nearly all the traffic. One merged into its rival, several went quiet, and a few were never communication protocols in the first place.
 
-After watching teams struggle with fragmented agent systems for 2 years, I'm seeing a clear shift toward standardized protocols. The [paper from Shanghai Jiao Tong University](https://arxiv.org/pdf/2504.16736) just mapped the entire landscape, and it's bigger than most realize.
+My first version of this post was a tour of that map. This one is the field report: what MCP and A2A each do, how they differ, what happened to the rest, and which one you need.
 
-## Tool & Resource Access Protocols
+## What Did the 2025 Survey Actually Map?
 
-**Model Context Protocol (MCP)** - Anthropic's well-known open standard that acts like "USB-C for AI applications," enabling standardized bidirectional communication between AI assistants and external systems. It uses RPC, OAuth, and HTTP streaming to provide persistent context and tool access across different applications.
+A gauge war. American railroads fought one in the 19th century: most northern lines ran on standard gauge or close to it, much of the South ran on 5 ft track, and freight crossing the line had to be reloaded or put on new wheels. Then, over two days at the end of May 1886, crews across the South pulled the spikes on one rail of every broad-gauge line, moved it three inches east, and spiked it back down.[^2] Nobody won that argument on merit. The South re-laid its track because the rest of the country already ran on the other gauge.
 
-**agents.json** - Wildcard AI's AI-native extension to OpenAPI that enables automatic tool discovery and workflow definition for AI agents. Basically a simple JSON file hosted at /.well-known/agents.json to expose available tools and their capabilities to AI systems.
+The survey drew the map mid-war. It sorts protocols on two axes: context-oriented (an agent reaching tools and data) versus inter-agent (agents talking to agents), and general-purpose versus domain-specific. MCP sat alone in the general-purpose, context-oriented box. A2A shared the inter-agent box with ANP, Agora, and four others. Worth knowing when you read the ANP section: Gaowei Chang, who created ANP, is one of the paper's authors.
 
-## Inter-Agent Protocols
+### What Did I Get Wrong the First Time?
 
-**Agent2Agent Protocol (A2A)** - Google's protocol designed to enable seamless collaboration between AI agents within organizations. It leverages JSON-RPC, Server-Sent Events (SSE), and OpenAPI to facilitate structured communication and coordination between multiple agents.
+Three things. I copied the survey's table, which credits the Agent Connect Protocol to LangChain; the paper's own text cites Cisco, and the project came out of Cisco's Outshift incubator with LangChain and Galileo as collaborators.[^3] I listed CrowdES and Spatial Population Protocols as agent protocols, when the first is a CVPR paper about generating crowd trajectories and the second is a distributed-computing model for robot localization. And I closed with a claim that early adopters "report 40% faster development cycles." I can't trace that number to any source, so it's gone.
 
-**Agent Network Protocol (ANP)** - A community-driven protocol focused on creating decentralized, cross-domain interoperability between AI agents. It uses JSON-LD and Decentralized Identifiers (DID) to enable agents from different domains and organizations to discover and interact with each other.
+## What Is MCP For?
 
-**Agent Interaction & Transaction Protocol (AITP)** - NEAR Foundation's blockchain-based protocol that ensures secure and decentralized interactions between AI agents. It combines blockchain technology with HTTP to provide trustless, verifiable transactions and communications in multi-agent environments.
+MCP lays the track from an agent to its own sidings: the tools and data it works with. Anthropic open-sourced it on November 25, 2024.[^4] On December 9, 2025, Anthropic donated it to the new Agentic AI Foundation (AAIF) under the Linux Foundation, alongside Block's goose and OpenAI's AGENTS.md, with AWS, Google, Microsoft, and OpenAI among the platinum members.[^5]
 
-**Agent Communication Protocol (AComP)** - IBM's protocol that defines standardized features and interfaces for multi-agent communication systems. It uses OpenAPI specifications to establish clear communication patterns and interaction models between different AI agents.
+A server exposes tools the model can call, resources it can read, and prompts a user can pick. The wire format is JSON-RPC 2.0, over stdio for local servers or Streamable HTTP for remote ones. Adoption isn't in question anymore. At the donation, Anthropic counted more than 10,000 active public servers and 97 million monthly SDK downloads, and by July 2026 the Tier 1 SDKs were at "close to half-a-billion downloads a month."[^6]
 
-**Agent Connect Protocol (AConP)** - LangChain's protocol that provides unified execution interfaces for AI agents across different platforms and frameworks. It uses OpenAPI and JSON to standardize how agents are invoked, managed, and coordinated within distributed systems.
+The big change this year is the 2026-07-28 spec, which made MCP stateless. The `initialize` handshake is gone. So is `Mcp-Session-Id`. Every request carries its own protocol version and client capabilities, and the HTTP transport copies the method and tool name into headers so a gateway can route without parsing the body:[^7]
 
-**Agora** - A meta-protocol system that enables dynamic protocol negotiation between AI agents using Large Language Models. It allows agents to automatically generate and agree upon communication protocols tailored to specific interaction contexts and requirements.
+```http
+POST /mcp HTTP/1.1
+Content-Type: application/json
+Accept: application/json, text/event-stream
+MCP-Protocol-Version: 2026-07-28
+Mcp-Method: tools/call
+Mcp-Name: get_weather
 
-## Domain-Specific Protocols
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "get_weather",
+    "arguments": { "location": "Seattle, WA" },
+    "_meta": {
+      "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+      "io.modelcontextprotocol/clientCapabilities": {}
+    }
+  }
+}
+```
 
-**Language Model Operating System (LMOS)** - Eclipse Foundation's protocol that creates an operating system-like environment for AI agents, particularly focused on IoT integration. It uses JSON-LD and DID to provide interoperability between AI agents and Internet of Things devices in distributed environments.
+The maintainers put it bluntly: MCP is "transforming from a bidirectional stateful protocol into a request/response stateless protocol." The payoff is operational. "Any request can now land on any server instance behind a plain round-robin load balancer without needing shared storage."[^6] If you run a remote MCP server with sticky sessions and a Redis table of session IDs, you can delete both once your clients speak the new version. A server that needs state now hands the model an explicit handle (a cart ID, a browser context) and takes it back as an argument. Sampling and Roots are deprecated. When a server needs input mid-call, it returns `"resultType": "input_required"` and the client retries with the answers.
 
-**Agent Protocol** - AI Engineer Foundation's open control API that provides RESTful interfaces for managing and controlling AI agents. It uses OpenAPI specifications to standardize how agents are created, configured, and monitored across different platforms and implementations.
+## What Is A2A For?
 
-**LOKA** - A decentralized protocol focused on ethical coordination and governance of AI agent networks. It uses Decentralized Ethical Coordination Protocols (DECP), DIDs, and Verifiable Credentials (VCs) to ensure responsible and transparent agent behavior in distributed systems.
+A2A is interchange: the rules for handing a freight car to a railroad you don't own. Google announced it on April 9, 2025, with more than 50 partners, and pitched it as a complement to MCP.[^8] It moved to the Linux Foundation that June and shipped 1.0 on March 12, 2026. In August, it joined MCP at the AAIF.[^9] By April 2026, the Linux Foundation counted more than 150 supporting organizations, with A2A built into Azure AI Foundry, Copilot Studio, and Amazon Bedrock AgentCore.[^10]
 
-**PXP** - A bidirectional interaction protocol specifically designed for human-LLM communication and collaboration. It combines finite state machines with blackboard architectures to manage complex, stateful interactions between humans and AI language models.
+The agent on the other end of an A2A call is opaque. You don't see its tools or its prompts. You see an Agent Card it publishes at a well-known URL:
 
-**CrowdES** - A specialized protocol for realistic robot-crowd simulation and interaction in physical environments. It uses Markov Chains combined with Diffusion Models to simulate and coordinate robot behavior within crowded, dynamic environments.
+```bash
+# what can this agent do, and which bindings does it speak?
+curl -s https://agent.example.com/.well-known/agent-card.json \
+  | jq '{skills: [.skills[].id], bindings: [.supportedInterfaces[].protocolBinding]}'
+```
 
-**Spatial Population Protocols (SPPs)** - A protocol designed for achieving consensus among distributed robot systems in spatial environments. It uses self-stabilizing coordination algorithms to enable robots to reach agreement and coordinate actions despite failures or network partitions.
+The card lists skills and auth schemes. It also names the bindings the agent accepts: JSON-RPC, gRPC, or plain HTTP+JSON. Work happens in tasks, and a task has a lifecycle a tool call doesn't. It can sit in `TASK_STATE_WORKING` for an hour, stream progress over SSE, post updates to your webhook, or stop and ask you something:
 
-## Final Thoughts
+```http
+POST /message:send HTTP/1.1
+Host: agent.example.com
+Content-Type: application/a2a+json
+A2A-Version: 1.0
 
-The fragmentation is real. I've seen production systems break because teams built custom "glue code" between agents. But early adopters using these standards report 40% faster development cycles and significantly cleaner architectures. The pattern emerging: MCP for tool integration, A2A for agent collaboration, ANP for distributed systems. Most teams will need a combination, not just one.
+{"message": {"role": "ROLE_USER", "messageId": "msg-1",
+             "parts": [{"text": "Book me a flight"}]}}
+```
+
+```json
+{"task": {"id": "task-uuid", "status": {
+  "state": "TASK_STATE_INPUT_REQUIRED",
+  "message": {"role": "ROLE_AGENT",
+    "parts": [{"text": "Where would you like to fly from and to?"}]}}}}
+```
+
+You answer with the same `taskId` and the agent carries on. If you wrote A2A code against 0.x, check your method names. Version 1.0 renamed `message/send` to `SendMessage` and `tasks/get` to `GetTask` to match gRPC, and it replaced the typed `TextPart` and `FilePart` objects with one part type that holds text, raw bytes, a URL, or data. The card's path changed earlier, in 0.3, from `agent.json` to `agent-card.json`.[^9]
+
+## MCP vs A2A: What's the Difference?
+
+| | MCP | A2A |
+|---|---|---|
+| Connects | An agent to tools and data | An agent to another agent |
+| Created by | Anthropic, November 2024 | Google, April 2025 |
+| Governance | AAIF (Linux Foundation) since December 2025 | Linux Foundation since June 2025, AAIF since August 2026 |
+| Current version | 2026-07-28 | 1.0.1 (May 28, 2026) |
+| Wire format | JSON-RPC 2.0 over stdio or Streamable HTTP | JSON-RPC 2.0, gRPC, or HTTP+JSON |
+| Discovery | `tools/list` on a server you configured | Agent Card at `/.well-known/agent-card.json` |
+| Unit of work | A tool call | A task with states, streaming, and push updates |
+| State | None at the protocol level | Task and context IDs |
+| The other side | A function behind a JSON Schema | An opaque agent with its own model |
+
+The overlap is real at the edges. MCP moved long-running tasks into an official extension, and you can wrap an A2A agent as an MCP tool if your client only speaks MCP. The test I use is ownership. If you can read the other side's schema and it does what the schema says, it's a tool, and MCP fits. If the other side has its own model and its own on-call rotation, it's an agent, and that's what A2A is for.
+
+## What Happened to ACP, ANP, and the Rest?
+
+First, the name problem. There are now four ACPs: IBM's Agent Communication Protocol, AGNTCY's Agent Connect Protocol, OpenAI and Stripe's Agentic Commerce Protocol, and Zed's Agent Client Protocol, which connects code editors to coding agents. If someone tells you to "support ACP," ask which one.
+
+| Protocol | Who built it | Status in October 2026 |
+|---|---|---|
+| Agent Communication Protocol | IBM Research (BeeAI) | Merged into A2A in August 2025, repo archived |
+| Agent Connect Protocol | AGNTCY (Cisco Outshift, with LangChain and Galileo) | Spec repo archived, AGNTCY builds on A2A |
+| ANP | Gaowei Chang and the ANP community | Active: v1.2 in September, proposed to the AAIF |
+| agents.json | Wildcard AI | No code changes since early 2025 |
+| AITP | NEAR AI | Dormant, its host platform deprecated in 2025 |
+| Agora | University of Oxford researchers | Research code, last commit March 2025 |
+| Eclipse LMOS | Deutsche Telekom, now at Eclipse | Incubating, active, niche |
+| Agent Protocol | AI Engineer Foundation (E2B, AutoGPT) | Last code change June 2024 |
+| LOKA, PXP, CrowdES, SPPs | Academic groups | Papers, not wire protocols |
+
+The IBM team said it plainly in August 2025: "ACP is officially merging with the A2A under the Linux Foundation," and "the ACP team will be winding down active development."[^11] AGNTCY's Agent Connect Protocol went the same way without an announcement. Its spec repo is archived, an open issue says it "should be deprecated since AGNTCY now supports A2A," and AGNTCY's own October proposal to the AAIF describes its messaging layer, SLIM, as "a transport binding beneath A2A."[^3]
+
+ANP is the one holdout with a pulse. It aims at the open web rather than the enterprise, with identity built on W3C decentralized identifiers through its own `did:wba` method. It's still moving: in August 2026 it dropped JSON-LD from its agent descriptions in favor of plain JSON, and in September it applied to join the AAIF.[^12] That's how gauge wars end. Nobody wins the argument. The smaller lines re-lay their track to match the traffic.
+
+## Which New Protocols Showed Up Since?
+
+Two that matter for interfaces. AG-UI, released by CopilotKit in May 2025, standardizes the event stream between an agent and the app a person is looking at: text deltas, tool calls, and state updates over SSE or WebSockets.[^13] It has more than 16,000 GitHub stars and first-party integrations in Microsoft Agent Framework and Google's ADK, among others. MCP Apps, the first official MCP extension, went stable on January 26, 2026. It lets a tool return interactive UI that renders inside the chat, and it grew out of MCP-UI and OpenAI's Apps SDK. Claude, ChatGPT, Goose, and VS Code all render it.[^14]
+
+Payments are where the gauge war is still on. Google shipped AP2 in September 2025 as an extension of A2A and MCP, with signed mandates that prove a user approved a purchase. Weeks later, OpenAI and Stripe launched the Agentic Commerce Protocol. In January 2026, Google followed with the Universal Commerce Protocol, built with Shopify, Etsy, Wayfair, Target, and Walmart, which runs over A2A, MCP, or plain APIs.[^15] And x402, which revives the HTTP 402 "Payment Required" status code, became its own Linux Foundation project in April 2026.[^16] Four specs with overlapping backers. No winner yet.
+
+## Which Agent Protocol Should You Use?
+
+If you're exposing an API, a tool, or a data source to agents, build an MCP server. Target 2026-07-28, keep it stateless, and you'll work in every major client. There's no second choice here.
+
+If you're building several agents inside your own system, you probably don't need A2A at all. Martin Fowler's first law of distributed object design was "don't distribute your objects," and it applies to agents too. A subagent you deploy and get paged for is a function call with a long runtime. Wrapping it in A2A buys you a network hop, an auth scheme, and a task state machine you now own.
+
+A2A earns its keep at an ownership boundary: a vendor's agent, or another business unit's, whose internals you'll never see. If you're shipping a front end for your agent, look at AG-UI; if your users live inside ChatGPT or Claude, use MCP Apps. Unless you sell things online, stay out of the payments fight for another year, and if you do, follow your payment processor's lead. Everything else on the 2025 map is reading material.
+
+Lay standard gauge. Build the interchange yard when a neighbor actually shows up.
+
+[^1]: https://arxiv.org/abs/2504.16736 (Yang et al., "A Survey of AI Agent Protocols," Shanghai Jiao Tong University and the ANP Community)
+[^2]: https://www.cato.org/publications/research-briefs-economic-policy/collusive-investments-technological-compatibility
+[^3]: https://www.linuxfoundation.org/press/linux-foundation-welcomes-the-agntcy-project-to-standardize-open-multi-agent-system-infrastructure-and-break-down-ai-agent-silos (also https://github.com/agntcy/acp-spec/issues/48 and https://github.com/aaif/project-proposals/issues/57)
+[^4]: https://www.anthropic.com/news/model-context-protocol
+[^5]: https://www.linuxfoundation.org/press/linux-foundation-announces-the-formation-of-the-agentic-ai-foundation
+[^6]: https://www.anthropic.com/news/donating-the-model-context-protocol-and-establishing-of-the-agentic-ai-foundation and https://blog.modelcontextprotocol.io/posts/2026-07-28/
+[^7]: https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http (changelog: https://modelcontextprotocol.io/specification/2026-07-28/changelog)
+[^8]: https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/
+[^9]: https://a2a-protocol.org/latest/blog/2026/03/12/a2a-protocol-ships-v10-production-ready-standard-for-agent-to-agent-communication/, https://a2a-protocol.org/latest/whats-new-v1/, and https://a2a-protocol.org/latest/blog/2026/08/27/a-new-chapter-for-a2a-joining-the-agentic-ai-foundation/
+[^10]: https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year
+[^11]: https://github.com/orgs/i-am-bee/discussions/5
+[^12]: https://github.com/agent-network-protocol/AgentNetworkProtocol and https://github.com/aaif/project-proposals/issues/46
+[^13]: https://www.copilotkit.ai/blog/introducing-ag-ui-the-protocol-where-agents-meet-users (docs: https://docs.ag-ui.com/introduction)
+[^14]: https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/
+[^15]: https://cloud.google.com/blog/products/ai-machine-learning/announcing-agents-to-payments-ap2-protocol, https://stripe.com/newsroom/news/stripe-openai-instant-checkout, and https://developers.googleblog.com/under-the-hood-universal-commerce-protocol-ucp/
+[^16]: https://www.linuxfoundation.org/press/linux-foundation-is-launching-the-x402-foundation-and-welcoming-the-contribution-of-the-x402-protocol

@@ -137,23 +137,23 @@ export const COVERS: Record<string, CoverSpec> = {
   },
 
   'wild-west-of-ai-protocols': {
-    kicker: 'Beyond MCP',
-    short: 'The wild west of AI agent protocols',
+    kicker: 'MCP vs A2A',
+    short: 'Which agent protocols survived',
     diagram: {
       kind: 'graph',
       nodes: [
         { t: 'your agent', x: 50, y: 50, hot: true },
         { t: 'MCP', x: 50, y: 14 },
-        { t: 'A2A', x: 86, y: 50 },
-        { t: 'Agora', x: 50, y: 86 },
-        { t: 'ANP', x: 14, y: 50 },
+        { t: 'A2A', x: 92, y: 50 },
+        { t: 'AG-UI', x: 50, y: 80 },
+        { t: 'ACP · AITP · Agora', x: 14, y: 50, ghost: true },
       ],
       edges: [
-        { from: 0, to: 1 },
-        { from: 0, to: 2 },
-        { from: 0, to: 3 },
-        { from: 0, to: 4 },
+        { from: 0, to: 1, label: 'tools & data', hot: true },
+        { from: 0, to: 2, label: 'agents', hot: true },
+        { from: 0, to: 3, label: 'your users' },
       ],
+      caption: 'Two standards, one foundation',
     },
   },
 
