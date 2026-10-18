@@ -1,0 +1,54 @@
+---
+// Hero dot grid. CSS dots by default; a canvas takes over to bend
+// around the cursor unless the visitor prefers reduced motion.
+---
+
+<div class="hero-dots absolute inset-0" data-dot-field aria-hidden="true">
+  <canvas class="pointer-events-none absolute inset-0 size-full"></canvas>
+</div>
+
+<style>
+  .hero-dots {
+    background-image: radial-gradient(var(--dot) 1px, transparent 1.5px);
+    background-size: 20px 20px;
+    mask-image: radial-gradient(
+      ellipse 40% 80% at 75% 50%,
+      #000 20%,
+      transparent 75%
+    );
+  }
+
+  .hero-dots[data-live] {
+    background-image: none;
+  }
+
+  @media (max-width: 860px) {
+    .hero-dots {
+      mask-image: radial-gradient(
+        ellipse 70% 40% at 50% 75%,
+        #000 20%,
+        transparent 75%
+      );
+    }
+  }
+</style>
+
+<script>
+  import { mountDotField } from '@/scripts/dot-field'
+
+  let dispose: (() => void) | undefined
+
+  function initDotField() {
+    dispose?.()
+    dispose = undefined
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const root = document.querySelector<HTMLElement>('[data-dot-field]')
+    if (root) dispose = mountDotField(root)
+  }
+
+  document.addEventListener('astro:page-load', initDotField)
+  document.addEventListener('astro:before-swap', () => {
+    dispose?.()
+    dispose = undefined
+  })
+</script>

@@ -1,5 +1,6 @@
 ---
 import Cover from '@/components/Cover.astro'
+import HeroDots from '@/components/HeroDots.astro'
 import PageHead from '@/components/PageHead.astro'
 import Timeline from '@/components/Timeline.astro'
 import { SITE, SOCIAL_LINKS } from '@/consts'
@@ -76,7 +77,7 @@ const websiteSchema = {
 
   <!-- Hero -->
   <section class="relative">
-    <div class="hero-dots absolute inset-0" aria-hidden="true"></div>
+    <HeroDots />
     <div
       class="relative mx-auto flex max-w-[1100px] flex-wrap items-center gap-12 px-4 pt-14 pb-14 sm:px-6 sm:pt-[72px] sm:pb-[72px]"
     >
@@ -140,38 +141,54 @@ const websiteSchema = {
           class="relative grid size-[320px] origin-center scale-[0.86] place-items-center font-mono text-xs tracking-normal sm:scale-100"
         >
           <span
-            class="border-dashed-color absolute inset-0 rounded-full border border-dashed"
-          ></span>
-          <span class="border-border absolute inset-14 rounded-full border"
-          ></span>
+            class="orbit-dashed border-dashed-color absolute inset-0 rounded-full border border-dashed"
+            aria-hidden="true"></span>
+          <span
+            class="border-border absolute inset-14 rounded-full border"
+            aria-hidden="true"></span>
+          <span class="orbit-satellite absolute inset-14" aria-hidden="true">
+            <span class="orbit-satellite-dot"></span>
+          </span>
           <img
             src="/content/images/2024/06/avatar-1.png"
             alt={SITE.title}
             width="112"
             height="112"
             class="orbit-avatar block size-28 rounded-full object-cover"
+            data-field-body
+            data-field-lens="0"
+            data-field-ripple="0.6"
           />
-          {
-            orbit.map((o) => (
-              <span
-                class:list={[
-                  'bg-surface absolute inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-[7px] rounded-full border px-[11px] py-1.5 whitespace-nowrap',
-                  o.hot
-                    ? 'border-primary text-foreground'
-                    : 'border-border text-muted-foreground',
-                ]}
-                style={`left: ${o.x}; top: ${o.y}`}
-              >
+          <div class="orbit-sway absolute inset-0">
+            {
+              orbit.map((o) => (
                 <span
-                  class:list={[
-                    'size-1.5 rounded-full',
-                    o.hot ? 'bg-primary' : 'bg-faint',
-                  ]}
-                />
-                {o.label}
-              </span>
-            ))
-          }
+                  class="orbit-tag absolute"
+                  style={`left: ${o.x}; top: ${o.y}`}
+                >
+                  <span
+                    class:list={[
+                      'orbit-pill bg-surface inline-flex items-center gap-[7px] rounded-full border px-[11px] py-1.5 whitespace-nowrap',
+                      o.hot
+                        ? 'border-primary text-foreground'
+                        : 'border-border text-muted-foreground',
+                    ]}
+                    data-field-body
+                    data-field-lens="0.4"
+                    data-field-ripple="1"
+                  >
+                    <span
+                      class:list={[
+                        'relative size-1.5 rounded-full',
+                        o.hot ? 'orbit-live bg-primary' : 'bg-faint',
+                      ]}
+                    />
+                    {o.label}
+                  </span>
+                </span>
+              ))
+            }
+          </div>
         </div>
       </div>
     </div>
@@ -285,26 +302,6 @@ const websiteSchema = {
 </Layout>
 
 <style>
-  .hero-dots {
-    background-image: radial-gradient(var(--dot) 1px, transparent 1.5px);
-    background-size: 20px 20px;
-    mask-image: radial-gradient(
-      ellipse 40% 80% at 75% 50%,
-      #000 20%,
-      transparent 75%
-    );
-  }
-
-  @media (max-width: 860px) {
-    .hero-dots {
-      mask-image: radial-gradient(
-        ellipse 70% 40% at 50% 75%,
-        #000 20%,
-        transparent 75%
-      );
-    }
-  }
-
   .border-dashed-color {
     border-color: var(--dashed);
   }
@@ -313,6 +310,88 @@ const websiteSchema = {
     box-shadow:
       0 0 0 6px var(--background),
       0 0 0 7px var(--border);
+  }
+
+  /* Orbit: slow ambient motion; cursor and ripple nudges come from dot-field */
+  .orbit-dashed {
+    animation: orbit-spin 160s linear infinite;
+  }
+
+  .orbit-satellite {
+    animation: orbit-spin 26s linear infinite;
+  }
+
+  .orbit-satellite-dot {
+    position: absolute;
+    top: -3px;
+    left: 50%;
+    width: 6px;
+    height: 6px;
+    margin-left: -3px;
+    border-radius: 9999px;
+    background: var(--primary);
+    box-shadow: 0 0 10px 1px color-mix(in srgb, var(--primary) 60%, transparent);
+  }
+
+  /* Tags sway along the ring; each counter-rotates to stay upright */
+  .orbit-sway {
+    animation: orbit-sway 18s ease-in-out infinite alternate;
+  }
+
+  .orbit-tag {
+    translate: -50% -50%;
+    animation: orbit-sway 18s ease-in-out infinite alternate-reverse;
+  }
+
+  .orbit-pill {
+    box-shadow: 0 0 0 calc(var(--field-glow, 0) * 4px)
+      color-mix(in srgb, var(--primary) 22%, transparent);
+  }
+
+  .orbit-live::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--primary);
+    animation: orbit-ping 2.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+
+  @keyframes orbit-spin {
+    to {
+      rotate: 360deg;
+    }
+  }
+
+  @keyframes orbit-sway {
+    from {
+      rotate: -6deg;
+    }
+    to {
+      rotate: 6deg;
+    }
+  }
+
+  @keyframes orbit-ping {
+    from {
+      scale: 1;
+      opacity: 0.55;
+    }
+    70%,
+    to {
+      scale: 2.8;
+      opacity: 0;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .orbit-dashed,
+    .orbit-satellite,
+    .orbit-sway,
+    .orbit-tag,
+    .orbit-live::after {
+      animation: none;
+    }
   }
 
   .rail-track {
