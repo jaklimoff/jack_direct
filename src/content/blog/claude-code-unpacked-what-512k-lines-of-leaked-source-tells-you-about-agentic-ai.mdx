@@ -1,7 +1,8 @@
 ---
-title: "Claude Code Source Leak: What 512k Lines Reveal About Agents"
-description: "Claude Code source leak, unpacked: what 512k lines reveal about the agent loop, 40+ built-in tools, 44 hidden feature flags, and Anthropic's roadmap."
+title: "Claude Code Source Leak: What It Revealed and What Shipped Since"
+description: "The Claude Code source leak, six months on: what the 2.1.88 source map exposed, which hidden features shipped, which died, and how the agent really works."
 date: 2026-04-02
+updated: 2026-10-18
 image: /content/images/2026/04/claude-code-unpacked-what-512k-lines-of-leaked-source-tells-you-about-agentic-ai.png
 authors:
   - jack-klimov
@@ -11,91 +12,125 @@ tags:
   - agents
 ---
 
-A misconfigured `.npmignore`, a 59.8 MB source map, and 512,000 lines of readable TypeScript - here's what Claude Code's leaked source reveals about how production agentic AI actually gets built.
+Half of what went viral about the Claude Code source leak was wrong, and I know because I published some of it. Six months later the changelog has answered most of the open questions, so here's the leak graded against what Anthropic actually shipped.
 
-The npm registry doesn't lie. On March 31, 2026, Anthropic shipped `@anthropic-ai/claude-code` version 2.1.88 with a misconfigured `.npmignore` - and a 59.8 MB source map file hitched a ride. That file mapped minified production JavaScript back to 512,000 lines of readable TypeScript source. Within hours, the community had it mirrored, archived, and fully indexed.[^2]
+## What Actually Leaked on March 31, 2026?
 
-[**ccunpacked.dev**](https://ccunpacked.dev) is the cleanest dissection of that leak. It's an unofficial, community-built site that takes the raw source and turns it into a navigable reference: the agent loop visualized step-by-step, the full tool catalog, every slash command, and a dedicated section on features that are compiled into the binary but gated behind flags set to `false` in the public build.[^4]
+At 22:36 UTC on March 30, Anthropic published `@anthropic-ai/claude-code` 2.1.88 to npm. The package carried a source map, a debugging file that maps minified JavaScript back to the original code, and the map pointed to a zip archive on Anthropic's Cloudflare R2 storage. Security researcher Chaofan Shou spotted it on March 31. The Register counted "some 1,900 TypeScript files consisting of more than 512,000 lines of code."[^1]
 
-This is not a security disclosure. This is a systems architecture post-mortem - and it's one of the most instructive reads on production agentic AI design you'll find anywhere.
+Anthropic's statement was short: "This was a release packaging issue caused by human error, not a security breach." No customer data or credentials were involved, and no model weights either; this was the client, the program that runs on your laptop.[^1] Version 2.1.88 is gone from npm today (the registry still lists its publish time, but asking for the version returns "version not found"), and the changelog jumps straight from 2.1.87 to 2.1.89.
 
-## How Does Claude Code's Agent Loop Actually Work?
+On March 31 Anthropic filed a DMCA notice against one GitHub mirror, and GitHub applied it to the whole fork network of about 8,100 repositories. A day later Anthropic narrowed it to the original repo and 96 named forks.[^2] The code is still out there, but I won't link it. You don't need it to understand the design, and the analysis sites (the best is the unofficial [ccunpacked.dev](https://ccunpacked.dev)) cover it without making you a redistributor.
 
-Think of the master loop like a Walmart self-checkout lane: one item goes in, gets processed, the result either resolves or gets re-queued, and nothing moves forward until that item is done. Simple. Deliberately so.
+One rumor worth killing: the same night, attackers hijacked a maintainer account and published poisoned axios versions 1.14.1 and 0.30.4.[^3] Some coverage warned that anyone who updated Claude Code in that window might have pulled in the poisoned axios. The neighboring releases, 2.1.87 and 2.1.89, list no runtime dependencies on npm at all, so installing Claude Code didn't pull axios. Running `npm install` in your own project between roughly 00:21 and 03:30 UTC on March 31 could have. Check that instead.
 
-At the core sits a single-threaded master loop, internally codenamed `nO`. The pattern is almost embarrassingly minimal: `while(tool_call) → execute tool → feed results → repeat`. When Claude produces a plain-text response with no tool invocations, the loop terminates and waits. No parallel threads competing for state, no agent swarms thrashing shared memory. [^1]
+## How Should You Read Leaked Source Code?
 
-The agent loop itself breaks into roughly 11 discrete stages - from input handling and context injection through to streaming output and state reconciliation. Alongside `nO` runs an async message queue (`h2A`) that handles real-time steering: you can interrupt, redirect, or cancel mid-execution without blowing up the loop's state machine. That's the design bet Anthropic made - debuggability and predictability over raw parallelism. [^1]
+Treat it like a set of blueprints left on a bus. Blueprints show rooms the builder hasn't finished, rooms that will be cut in the next revision, and a few that were only ever a joke on the margin. They don't tell you which ones get built.
 
-Sub-agents exist, but they're leashed. Claude can spawn one sub-agent at a time via the `dispatch_agent` (internally `I2A`/Task Agent) tool. Those sub-agents **cannot spawn their own sub-agents** - depth is hard-limited to one level. You get parallelism for codebase-wide searches or multi-approach explorations, but you don't get recursive agent explosions that are impossible to trace in production.[^1] [Forked skills (`context: fork`)](/blog/every-knob-in-a-claude-code-skill-md/#the-five-execution-knobs-where-it-gets-interesting) run on the same sub-agent mechanism.
+The leak's feature flags are those unfinished rooms. A flag is a boolean that keeps compiled code switched off in the public build, and when 512,000 lines spill out, every flag reads like a promise. Reporters counted them (the "44 flags" figure came from secondary write-ups; none of the primary coverage I checked gives a count), named them, and called the list a roadmap.
 
-## What's in the Tool System? (More Than You Think)
+It was a roadmap. Roadmaps change.
 
-The public docs mention a handful of tools. The source tells a different story. The tool catalog inside `ccunpacked.dev` maps over 40 built-in tools across seven categories:
+## What Does Claude Code's Agent Loop Look Like?
 
-| Category | Examples |
+The loop itself was never a secret, and Anthropic documents it plainly. Claude works through three phases: "gather context, take action, and verify results," and "these phases blend together."[^4] In code terms, the model answers with tool calls, the harness runs them and feeds the results back, and the loop repeats until the model answers with plain text. You can interrupt at any point: press `Esc` to cancel, or type a correction that Claude reads after the current tool calls finish.
+
+This is where my first version of this post went wrong, and it's worth a paragraph. I wrote that the master loop was "internally codenamed `nO`" and ran beside an async queue called `h2A`. Those names didn't come from the leak. They come from a PromptLayer article published August 29, 2025, seven months earlier, built on community reverse engineering of the shipped JavaScript.[^5] And `nO` and `h2A` look exactly like what a minifier produces when it shortens variable names. I took a minified variable name for a codename and dressed up an old blog post as fresh leak analysis.
+
+Claude Code also persists more than I claimed. My first version said the public build had "no session persistence whatsoever," which was false even then:
+
+```bash
+claude --continue        # reopen the latest session in this directory
+claude --resume          # pick any saved session from a list
+ls ~/.claude/projects/   # every session is a plaintext JSONL transcript here
+```
+
+`--continue` and `--resume` have been around since April 2025, and sessions are written "continuously to local transcript files as you work."[^6] What carries knowledge between sessions is CLAUDE.md, which you write, and auto memory, which Claude writes and which has been on by default since version 2.1.59 in February 2026.[^7]
+
+## What Tools Does Claude Code Have?
+
+My first version printed a table of tool names like `read_file`, `dispatch_agent`, and `todo_read`. Those were wrong too. `dispatch_agent` was a real name back in the v0.2 builds of early 2025; v0.2.82 renamed the tools "for consistency," and the sub-agent tool became `Task`, then `Agent` in 2.1.63. Today's names are the exact strings you write in permission rules and hook matchers, and they're PascalCase:[^8]
+
+| What it does | Tool names (2.1.302, October 2026) |
 |---|---|
-| File Operations | `read_file`, `write_file`, `edit_file`, `multi_edit` |
-| Execution | `bash`, `computer` |
-| Search & Fetch | `grep`, `glob`, `web_fetch` |
-| Agents & Tasks | `dispatch_agent`, `task` |
-| Planning | `todo_read`, `todo_write` |
-| System Management | `mcp` (Model Context Protocol) |
-| Experimental | `web_browser` (gated) |
+| Files | `Read`, `Write`, `Edit`, `NotebookEdit` |
+| Search | `Glob`, `Grep`, `LSP` |
+| Shell | `Bash`, `PowerShell`, `Monitor` |
+| Web | `WebFetch`, `WebSearch` |
+| Delegation | `Agent`, `SendMessage`, `Workflow`, `Skill` |
+| Planning | `TaskCreate`, `TaskUpdate`, `TaskList`, `EnterPlanMode` |
+| Scheduling | `CronCreate`, `ScheduleWakeup`, `RemoteTrigger` |
 
-The TODO-based planning tools are particularly interesting. Claude maintains a persistent, in-loop task list - not a scratchpad, but a formal planning artifact that feeds back into its own context. It's structured autonomy: the model reasons about its own plan as data.[^4]
+One surprise for hook authors: on macOS, Linux, and WSL, `Glob` and `Grep` are left out of the default set. Claude runs `find` and `grep` through `Bash` instead (embedded builds of `bfs` and `ugrep`), so your hooks and permission rules see those searches as `Bash` calls. There's no built-in `computer` or `web_browser` tool. Browser control is the separate Claude in Chrome integration, and MCP tools show up under their own `mcp__server__tool` names. The planning tools changed as well: `TodoWrite` is off by default now, and the newest models get no checklist tool unless you ask for one, because they track multi-step work without it.
 
-Each tool invocation also passes through a four-layer decision pipeline before execution. Layers 1–3 are deterministic rule checks. Only when all three are inconclusive does a separate AI classifier fire - always Sonnet, always `temperature=0`, explicitly scoped as a "safety monitor for autonomous AI programming agents." The classifier runs against three risk categories: prompt injection, scope creep, and unintended harm. Your `CLAUDE.md` config gets injected into the classifier's context, which means your project-level instructions directly influence what the agent is allowed to do autonomously.[^5]
+Sub-agents aren't limited to "one at a time," as I claimed. The docs say Claude can "spawn multiple subagents to work simultaneously," up to 20 in a session.[^9] They can't nest forever, but the depth limit has moved around: up to five layers in 2.1.172, no nesting at all in 2.1.217, and three layers since 2.1.219. If you liked the old flat rule, it's one variable away:
 
-## What Are Claude Code's Hidden Features?
+```bash
+export CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1   # subagents can't spawn their own
+```
 
-This is the section that broke the internet. The leak documents **44 feature flags** gating functionality that is fully compiled but not shipped. These aren't stubs or TODO comments - they're real implementation code behind a boolean.[^2]
+## How Does the Permission Classifier Decide?
 
-### KAIROS - Always-On Background Agent
+The leak write-ups described a "four-layer decision pipeline" ending in a Sonnet classifier "always" running at `temperature=0`. The real system had shipped a week before the leak, on March 24, 2026, as auto mode, and Anthropic explained it in an engineering post the next day.[^10] The `temperature=0` detail and the quoted classifier prompt appear in no official source, so I've dropped them.
 
-KAIROS is a persistent memory and ambient awareness system. It logs user activity across sessions and acts proactively - without waiting for a prompt. Think of it as Claude running in daemon mode, watching your repo for changes and building context continuously. The public build has no session persistence whatsoever; KAIROS is the architectural answer to that gap.[^3]
+The motivation is a statistic I keep quoting at people: users approve 93% of permission prompts. Past a certain point, the prompt stops being a safety check and turns into a reflex. Auto mode replaces most prompts with a decision order where "the first matching step wins": your allow, ask, and deny rules; then automatic approval for reads and edits inside the working directory; then a classifier for everything else, which hands Claude the reason when it blocks.[^11]
 
-### UltraPlan - 30-Minute Deep Planning
+```json
+{
+  "permissions": {
+    "defaultMode": "auto",
+    "allow": ["Bash(npm test)"],
+    "deny": ["Bash(git push *)", "WebFetch"]
+  }
+}
+```
 
-UltraPlan offloads the planning phase of a task to Claude Opus running in a remote cloud container - for up to 30 minutes. You get a browser interface to monitor and approve the plan before execution starts. For migrations, large refactors, or any task where the cost of a wrong plan is measured in hours, this is a qualitatively different capability.[^3]
+Two details matter more than the layer count. First, entering auto mode drops your broad allow rules (`Bash(*)`, wildcarded interpreters, package-manager run commands), while narrow ones like `Bash(npm test)` keep working. Second, the classifier sees your messages, the agent's tool calls, and your CLAUDE.md, but tool results are stripped. That's the prompt-injection defense: hostile text arrives through tool results, so the judge never reads it.
 
-### Coordinator Mode - Multi-Agent Orchestration
+The classifier runs on Claude Sonnet 5 by default these days, not "always Sonnet" (at launch it ran on Sonnet 4.6, and server-side configuration can override it). Anthropic also published the misses: on 52 real overeager actions, the full pipeline let 17% through. I respect that number more than any benchmark chart. Auto mode is good, but it's not a substitute for reading the diff on production infrastructure.
 
-One Claude instance acts as an orchestrator managing multiple parallel worker agents through a mailbox system. Each worker gets a restricted toolset and handles a subtask. The coordinator routes work and reconciles results. This is Governed Autonomy in practice - parallelism with explicit coordination topology, not a free-for-all swarm.[^3]
+## Which Hidden Features Have Shipped Since the Leak?
 
-### BUDDY - The AI Pet
+Here's the blueprint graded against the building, using version numbers from the changelog and dates from npm publish times.[^12]
 
-Yes, really. BUDDY is a virtual pet system with species, traits, and deterministic generation based on your user ID. It was originally planned as an April 1 teaser. It's absurd, it's charming, and it's evidence that Anthropic's engineers have a sense of humor buried under 512k lines of TypeScript.[^3]
+| Leaked flag | What happened | When |
+|---|---|---|
+| `BUDDY` (virtual pet) | Shipped as `/buddy` for April Fools, removed within about a week | 2.1.89, Mar 31 |
+| `ULTRAPLAN` (planning in a cloud session) | Shipped as `/ultraplan` research preview, then removed: "use plan mode instead" | removed in 2.1.222, Aug 4 |
+| `KAIROS` (always-on agent) | Never shipped by name. The pieces did: `Monitor`, `/proactive` as an alias for `/loop`, background sessions | 2.1.98 to 2.1.139, Apr to May |
+| `DAEMON` | Agent view and `claude daemon`, a background service that supervises sessions | 2.1.139, May 11 |
+| Coordinator mode | Agent teams already existed behind a flag; dynamic workflows run "tens to hundreds of agents" | 2.1.32 (Feb), 2.1.154 (May 28) |
+| `AGENT_TRIGGERS` | Cron tools already existed; Routines fire on a schedule, a GitHub event, or an API call | 2.1.71 (Mar 6), Routines Apr 14 |
+| `VOICE_MODE` | Already rolling out as `/voice` four weeks before the leak | Mar 3 |
+| `WEB_BROWSER_TOOL` | Claude in Chrome, in beta since December 2025, now generally available | 2.1.198, Jul 1 |
+| `DREAM` (memory consolidation) | Auto memory predates the leak; a "dream" pass isn't in the docs | 2.1.59, Feb |
+| `UNDERCOVER_MODE` | Never shipped; it was internal. The public `attribution` setting already hides the commit trailer | 2.0.62, Dec 2025 |
 
-### The Rest of the Roadmap
+Look at the shape of that table. Five of the "hidden" rooms were already open to the public before March 31 (voice, browser control, agent teams, cron, and auto memory), and the leak just showed the scaffolding around them. Two shipped and were torn down within months. The always-on agent everyone was most excited about arrived as a handful of small, boring parts instead of one big named feature. That's how product teams actually build, and no blueprint shows it.
 
-The flag list reads like a product roadmap that forgot to ship:
+Agent teams are still experimental, so here's the switch if you want the closest thing to Coordinator Mode:[^13]
 
-* `VOICE_MODE` - full voice interaction with its own CLI entrypoint
-* `WEB_BROWSER_TOOL` - real browser control via Playwright, not just `web_fetch`
-* `DAEMON` - background process mode for persistent operation
-* `AGENT_TRIGGERS` - event-based agent activation (webhooks, cron jobs)
-* `DREAM` - self-maintaining memory without external storage
-* `UNDERCOVER_MODE` - prevents Claude from surfacing AI attribution in commits, used internally by Anthropic employees[^3]
+```bash
+export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1   # a lead, teammates, a shared task list, and a mailbox
+```
 
-## What Does This Architecture Tell You About Building Agentic Systems?
+## What Does the Leak Teach You About Building Agents?
 
-Anthropic made a specific, opinionated bet: **a single-threaded master loop with one level of sub-agent depth, deterministic tool guards, and explicit planning artifacts beats a multi-agent swarm in production.** The debuggability argument is real. When something goes wrong in an unconstrained multi-agent system, your observability stack is doing archaeology. With a flat message history and a single main thread, you can replay every decision. For contrast, see [how ForgeCode's harness differs](/blog/forgecode-vs-claude-code-which-cli-agent-wins-in-2026/).
+The design lesson I'd steal holds up better than my facts did: put deterministic checks in front of the expensive judgment. Rules resolve first, the cheap automatic approvals come second, and the model-based classifier only sees what's left. You can add your own deterministic layer with [hooks](/blog/claude-code-hooks-complete-guide/), which see every tool call before the permission prompt does, and package isolated tasks with [forked skills](/blog/every-knob-in-a-claude-code-skill-md/). For a different take on the same harness problems, compare [how ForgeCode structures its agent](/blog/forgecode-vs-claude-code-which-cli-agent-wins-in-2026/).
 
-The four-layer tool permission system is the same principle. Three cheap deterministic checks gate the expensive AI classifier. You can bolt your own deterministic layer onto it with [hooks](/blog/claude-code-hooks-complete-guide/), which see every tool call before the permission prompt does. Your mean time to recovery (MTTR) on a misbehaving agent drops dramatically when the failure modes are enumerated upfront rather than emergent.
+The research lesson is the one I paid for. A leak isn't evidence of a roadmap, a minified variable isn't a codename, and a blog post from August 2025 doesn't become news because it gets reposted next to a leak. Next time a vendor's code spills, read the changelog for six months before you write the explainer. It's slower. It's also right.
 
-The hidden features - KAIROS, Coordinator Mode, AGENT_TRIGGERS - show where the architecture is clearly heading: Sovereign AI workflows that run continuously, not on-demand. Background agents with webhooks and cron schedules. Orchestrators managing worker fleets. This is not speculative. The code is compiled, sitting behind a flag.[^2]
-
-## The Real Lesson From the Leak
-
-The architectural decision worth stealing isn't any single feature. It's the discipline of **controllable autonomy over maximal autonomy**. The `nO` loop, the one-level sub-agent cap, the classifier-as-last-resort - these are deliberate constraints, not limitations. Anthropic built a system where every decision has a traceable path. In an era where "agentic AI" gets conflated with "agent that does whatever it wants," that constraint is the competitive differentiator.
-
-`ccunpacked.dev` is worth an afternoon of your time. Not because the leak is salacious - it isn't - but because it's a rare, unfiltered look at how a production agentic system actually gets built, warts, virtual pets, and all.[^4]
-
-## References
-
-[^1]: https://blog.promptlayer.com/claude-code-behind-the-scenes-of-the-master-agent-loop/
-[^2]: https://www.the-ai-corner.com/p/claude-code-source-code-leaked-2026
-[^3]: https://wavespeed.ai/blog/posts/claude-code-leaked-source-hidden-features/
-[^4]: https://ccunpacked.dev
-[^5]: https://www.gate.com/news/detail/ant-engineer-reverse-engineers-claude-code-source-revealing-the-four-layer-19761177
+[^1]: https://www.theregister.com/2026/03/31/anthropic_claude_code_source_code/
+[^2]: https://github.com/github/dmca/blob/master/2026/04/2026-04-01-anthropic-retraction.md (the original notice: https://github.com/github/dmca/blob/master/2026/03/2026-03-31-anthropic.md)
+[^3]: https://github.com/advisories/GHSA-fw8c-xr5c-95f9
+[^4]: https://code.claude.com/docs/en/how-claude-code-works
+[^5]: https://blog.promptlayer.com/claude-code-behind-the-scenes-of-the-master-agent-loop/
+[^6]: https://code.claude.com/docs/en/sessions
+[^7]: https://code.claude.com/docs/en/memory
+[^8]: https://code.claude.com/docs/en/tools-reference
+[^9]: https://code.claude.com/docs/en/sub-agents
+[^10]: https://www.anthropic.com/engineering/claude-code-auto-mode
+[^11]: https://code.claude.com/docs/en/permission-modes
+[^12]: https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md (version dates from the npm registry; voice mode: https://techcrunch.com/2026/03/03/claude-code-rolls-out-a-voice-mode-capability/; Routines: https://claude.com/blog/introducing-routines-in-claude-code; Ultraplan's removal notice: https://code.claude.com/docs/en/ultraplan)
+[^13]: https://code.claude.com/docs/en/agent-teams
