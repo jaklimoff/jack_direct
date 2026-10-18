@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 
 import { defineConfig } from 'astro/config'
 
@@ -19,6 +19,20 @@ import { pluginCollapsibleSections } from '@expressive-code/plugin-collapsible-s
 import { pluginLineNumbers } from '@expressive-code/plugin-line-numbers'
 
 import tailwindcss from '@tailwindcss/vite'
+
+// Machine-specific dev hosts live in the gitignored .env, e.g.
+// DEV_ALLOWED_HOSTS=myhost.local,other.local
+const envFile = new URL('./.env', import.meta.url)
+const devAllowedHosts = (
+  process.env.DEV_ALLOWED_HOSTS ??
+  (existsSync(envFile)
+    ? readFileSync(envFile, 'utf8').match(/^DEV_ALLOWED_HOSTS=(.*)$/m)?.[1]
+    : undefined) ??
+  ''
+)
+  .split(',')
+  .map((host) => host.trim())
+  .filter(Boolean)
 
 const blogSlugs = readdirSync(new URL('./src/content/blog', import.meta.url))
   .filter((file) => file.endsWith('.mdx'))
@@ -117,6 +131,7 @@ export default defineConfig({
   server: {
     port: 1234,
     host: true,
+    allowedHosts: devAllowedHosts,
   },
   devToolbar: {
     enabled: false,
