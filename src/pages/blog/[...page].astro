@@ -17,10 +17,17 @@ export async function getStaticPaths({
 }
 
 const { page } = Astro.props
+
+const pageSuffix = page.currentPage > 1 ? ` (page ${page.currentPage})` : ''
+const description = `All posts by Jack Klimov on agentic coding with Claude Code, distributed systems, and running engineering teams${pageSuffix}.`
 ---
 
-<Layout class="max-w-[900px] sm:px-6">
-  <PageHead slot="head" title="Blog" />
+<Layout
+  class="max-w-[900px] sm:px-6"
+  title={`Blog${pageSuffix}`}
+  description={description}
+>
+  <PageHead slot="head" title={`Blog${pageSuffix}`} />
 
   <header class="flex flex-col gap-3 pt-10 pb-6 sm:pt-14">
     <span class="text-faint font-mono text-[12.5px] tracking-normal">

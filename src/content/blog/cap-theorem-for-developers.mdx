@@ -1,5 +1,5 @@
 ---
-title: "CAP Theorem for Developers: What It Is and How It Affects Distributed Systems"
+title: "CAP Theorem for Developers: Trade-offs and Real Examples"
 description: "CAP theorem for developers: what consistency, availability, and partition tolerance mean in practice, with Dynamo, Spanner, and Cassandra examples."
 date: 2024-07-02
 image: /content/images/covers/cap-theorem-for-developers.png
@@ -80,7 +80,7 @@ Think of a social media feed. If there's a network partition, you might not see 
 
 ### Amazon's Dynamo: Embracing AP for Shopping Carts
 
-Let's take Amazon during online sale. Millions of shoppers, all clicking 'Add to Cart' simultaneously. Amazon's Dynamo database, which powers their shopping cart system, is a prime example of an AP (Availability and Partition Tolerance) system.
+Let's take Amazon during an online sale. Millions of shoppers, all clicking 'Add to Cart' simultaneously. Amazon's Dynamo database, which powers their shopping cart system, is a prime example of an AP (Availability and Partition Tolerance) system.
 
 Dynamo prioritizes availability, ensuring that customers can always add items to their carts, even if there's a network partition. It uses eventual consistency, meaning that while your cart might not immediately reflect changes across all nodes, it will eventually catch up.
 
@@ -109,7 +109,7 @@ Before diving into the technical details, take a step back and really understand
 
 ### 2. Embrace Eventual Consistency Where Appropriate
 
-Eventual consistency can be a powerful tool in your CAP-aware design arsenal. It allows you to prioritize availability and partition tolerance while still providing a form of consistency over time.
+Eventual consistency can be a powerful tool in your CAP-aware design arsenal. It allows you to prioritize availability and partition tolerance while still providing a form of consistency over time. How fast replicas catch up depends on which of the [database replication methods](/blog/understanding-replication-statement-wal-logical-log-and-trigger-based-approaches/) your database uses.
 
 ### 3. Implement Multi-Version Concurrency Control (MVCC)
 

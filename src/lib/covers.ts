@@ -66,7 +66,7 @@ export interface CoverSpec {
 }
 
 export const COVERS: Record<string, CoverSpec> = {
-  'the-warning-my-agent-gave-that-i-never-saw': {
+  'claude-code-mod-open-questions': {
     kicker: 'A Claude Code mod',
     short: 'The warning my agent gave that I never saw',
     diagram: {

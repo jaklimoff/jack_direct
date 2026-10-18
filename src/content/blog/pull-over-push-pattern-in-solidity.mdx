@@ -1,5 +1,5 @@
 ---
-title: '"Pull over Push" pattern in solidity'
+title: "Pull Over Push Pattern in Solidity: Safe ETH Withdrawals"
 description: "Pull over push pattern in Solidity: let users withdraw funds instead of sending them, so one failing transfer can't block payouts. With OpenZeppelin code."
 date: 2024-05-31
 image: /content/images/covers/pull-over-push-pattern-in-solidity.png
@@ -20,7 +20,7 @@ In the world of Ethereum smart contracts, transferring ETH can be tricky. The "P
 
 The traditional approach to sending funds — automatically pushing ether to users — seems straightforward but can lead to several issues.
 
-Here's a simplified example of push pattern, where we send transfer ETH directly to all receivers when `push` function is called.
+Here's a simplified example of the push pattern, where we transfer ETH directly to all receivers when the `distributeFunds` function is called.
 
 ```solidity
 // Push pattern - NOT RECOMMENDED
@@ -33,7 +33,7 @@ function distributeFunds(address[] memory recipients, uint256[] memory amounts) 
 
 ### Issues with the Push Pattern:
 
-1. **Gas Limit Problems**: Iterating over a large array of addresses can exceed the block gas limit, making the function fail.
+1. **Gas Limit Problems**: Iterating over a large array of addresses can exceed the block gas limit, making the function fail (more on [loops and gas costs in Solidity](/blog/how-to-stop-your-solidity-code-from-guzzling-gas-and-eth/)).
 2. **Expense for Contract Owner**: The user who calls the withdraw function pays for all the gas, which can be really expensive.
 3. **Potential for Failure**: If even one transfer fails (e.g., due to a recipient contract throwing an error) the entire transaction will be reverted.
 
@@ -62,11 +62,11 @@ function withdraw() external {
 
 1. **Isolated Failures**: Each withdrawal is a separate transaction. If one fails, others are unaffected.
 2. **Fair Cost Distribution**: Users only pay for their own withdrawals, which distributes the gas costs more fairly.
-3. **Enhanced Efficiency**: Avoids the inefficiency of looping through potentially large arrays, leading to lower gas usage
+3. **Enhanced Efficiency**: Avoids the inefficiency of looping through potentially large arrays, leading to lower gas usage.
 
 ## OpenZeppelin's Implementation of the Pull Pattern
 
-If you want real world best practices, check how OpenZeppelin implements the Pull over Push pattern in its `PullPayment.sol` contract. This implementation leverages the Escrow contract to manage user funds securely, but the whole idea is pretty straightforward and should be clear for you already.
+If you want real-world best practices, check how OpenZeppelin implements the Pull over Push pattern in its `PullPayment.sol` contract. This implementation leverages the Escrow contract to manage user funds securely, but the whole idea is pretty straightforward and should be clear for you already.
 
 ```solidity
 // OpenZeppelin PullPayment example

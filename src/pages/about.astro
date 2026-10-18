@@ -2,6 +2,18 @@
 import PageHead from '@/components/PageHead.astro'
 import Layout from '@/layouts/Layout.astro'
 import { ABOUT_URL, WEBSITE_ID, getPersonSchema } from '@/lib/schema'
+import { getEntry } from 'astro:content'
+
+// A few posts to start with; titles come from the posts themselves
+const startHereIds = [
+  'claude-code-hooks-complete-guide',
+  'every-knob-in-a-claude-code-skill-md',
+  'claude-code-mod-open-questions',
+  'cap-theorem-for-developers',
+]
+const startHere = (
+  await Promise.all(startHereIds.map((id) => getEntry('blog', id)))
+).filter((post) => post !== undefined)
 
 const description =
   'Jack Klimov is a software architect and former founder and CTO with 15+ years in distributed systems, now putting AI agents to work in engineering teams.'
@@ -48,6 +60,20 @@ const profileSchema = {
 
       <p class="text-foreground leading-relaxed">
         Because that's how I like my communication: direct. No fluff, no filler, no twelve-paragraph buildup to a one-sentence takeaway. The best technical conversations happen when everyone skips the ceremony and gets to the point. This site tries to honor that.
+      </p>
+
+      <h2 class="text-2xl font-semibold mt-10">Where to start</h2>
+
+      <ul class="text-foreground leading-relaxed">
+        {startHere.map((post) => (
+          <li>
+            <a href={`/blog/${post.id}/`} class="underline underline-offset-4 hover:text-foreground/80">{post.data.title}</a>
+          </li>
+        ))}
+      </ul>
+
+      <p class="text-foreground leading-relaxed">
+        Or browse <a href="/blog/" class="underline underline-offset-4 hover:text-foreground/80">everything I've written</a>.
       </p>
 
       <h2 class="text-2xl font-semibold mt-10">Get in touch</h2>

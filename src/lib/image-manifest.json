@@ -74,6 +74,11 @@
     "height": 1260,
     "webp": "/content/images/covers/claude-code-hooks-complete-guide.webp"
   },
+  "/content/images/covers/claude-code-mod-open-questions.png": {
+    "width": 2400,
+    "height": 1260,
+    "webp": "/content/images/covers/claude-code-mod-open-questions.webp"
+  },
   "/content/images/covers/every-knob-in-a-claude-code-skill-md.png": {
     "width": 2400,
     "height": 1260,
@@ -98,11 +103,6 @@
     "width": 2400,
     "height": 1260,
     "webp": "/content/images/covers/reflections-on-kotters-8-step-change-model.webp"
-  },
-  "/content/images/covers/the-warning-my-agent-gave-that-i-never-saw.png": {
-    "width": 2400,
-    "height": 1260,
-    "webp": "/content/images/covers/the-warning-my-agent-gave-that-i-never-saw.webp"
   },
   "/content/images/covers/wild-west-of-ai-protocols.png": {
     "width": 2400,

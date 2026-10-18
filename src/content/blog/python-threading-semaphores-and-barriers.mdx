@@ -66,7 +66,7 @@ Threading shines in scenarios where you're dealing with I/O-bound tasks, like re
 However, it's not all sunshine and rainbows. 😦 Threading comes with its own set of challenges:
 
 1. **Race conditions**: When threads access shared resources, unexpected results can occur if not managed properly.
-2. **Deadlocks**: Threads can get stuck waiting for each other, like two polite people insisting the other go first through a doorway.
+2. **Deadlocks**: Threads can get stuck waiting for each other, like two polite people insisting the other go first through a doorway. I wrote a separate post on [Python deadlocks and how to avoid them](/blog/understanding-deadlocks-in-python-with-examples/).
 3. **Complexity**: Debugging threaded applications can be tricky, as the order of execution isn't always predictable.
 
 As we venture deeper into the world of Python threading, we'll explore tools like semaphores and barriers that help manage these challenges. These synchronization primitives act like the head chef in our kitchen, ensuring that all the moving parts work together harmoniously.
@@ -274,7 +274,7 @@ In this rocket launch simulation:
 3. Consider using timeouts: Both semaphores and barriers support timeouts to prevent indefinite waiting.
 4. Be mindful of the thread count: Ensure the number of threads matches the barrier count to avoid deadlocks.
 
-## 6. Performance Considerations
+## 5. Performance Considerations
 
 When working with Python threading, semaphores, and barriers, performance is like a delicate balancing act. It's not just about making your code run faster, but about making it run smarter. Let's dive into some key performance considerations that can help you fine-tune your multithreaded applications.
 
@@ -350,8 +350,8 @@ print(f"Parallel time: {parallel_time}")
 
 This example demonstrates how threading can dramatically speed up I/O-bound operations.
 
-## 7. The end
+## 6. Conclusion
 
-So now you know the most important tools to tame python threading and improve performance of your backend server or whatever you use it for 🥸. If you read till this point, I just want to thank you and wish you the best day ever ;) . Stay cool, stay positive and pay attention to semaphores on the roads too!
+So now you know the most important tools to tame Python threading and improve performance of your backend server or whatever you use it for 🥸. If you read till this point, I just want to thank you and wish you the best day ever ;) . Stay cool, stay positive and pay attention to semaphores on the roads too!
 
 Happy coding!

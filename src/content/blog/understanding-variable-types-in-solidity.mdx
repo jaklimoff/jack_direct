@@ -135,7 +135,7 @@ function credit(address user, uint256 amount) internal {
 }
 ```
 
-Just don't loop over an unbounded `holders` in a state-changing function. That's a gas-limit DoS waiting for its first popular week.
+Just don't loop over an unbounded `holders` in a state-changing function. That's a gas-limit DoS waiting for its first popular week. If you need to pay holders out, use [the pull over push pattern](/blog/pull-over-push-pattern-in-solidity/) instead.
 
 ## Storage, Memory, or Calldata: Which Data Location Do You Need?
 
@@ -200,7 +200,7 @@ contract Packed {
 }
 ```
 
-Writing a zero slot to non-zero costs 20,000 gas, so a saved slot is real money. That's why the `Order` struct pairs `address` (20 bytes) with `uint96` (12 bytes). Don't overdo it. A lone `uint8` costs extra masking operations compared with a `uint256`, because the EVM works in 32-byte words. Check the result with `solc --storage-layout`.
+Writing a zero slot to non-zero costs 20,000 gas, so a saved slot is real money. That's why the `Order` struct pairs `address` (20 bytes) with `uint96` (12 bytes). Don't overdo it. A lone `uint8` costs extra masking operations compared with a `uint256`, because the EVM works in 32-byte words. Check the result with `solc --storage-layout`. I collected [more Solidity gas optimization techniques](/blog/how-to-stop-your-solidity-code-from-guzzling-gas-and-eth/) in a separate post.
 
 ## How Do You Pin the Solidity Compiler Version With Pragma?
 

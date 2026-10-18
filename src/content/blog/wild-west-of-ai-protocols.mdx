@@ -1,5 +1,5 @@
 ---
-title: Wild West of AI Protocols
+title: "AI Agent Protocols Beyond MCP: A2A, ACP, ANP and More"
 description: "AI agent protocols beyond MCP: a tour of A2A, ANP, Agora, Agent Protocol, and other agent communication standards, and what each one is for."
 date: 2025-07-01
 image: /content/images/covers/wild-west-of-ai-protocols.png
@@ -9,20 +9,20 @@ tags:
   - ai
   - protocols
   - agents
-featured: true
+featured: false
 ---
 
-The are way more protocols for AI agents out there besides MCP, that you might not even heard about! Let's check this "wild west" of agents communication toghether, shall we?
+There are way more protocols for AI agents out there besides MCP that you might not even have heard about! Let's check out this "wild west" of agent communication together, shall we?
 
 After watching teams struggle with fragmented agent systems for 2 years, I'm seeing a clear shift toward standardized protocols. The [paper from Shanghai Jiao Tong University](https://arxiv.org/pdf/2504.16736) just mapped the entire landscape, and it's bigger than most realize.
 
-## 🔧 Tool & Resource Access Protocols
+## Tool & Resource Access Protocols
 
-**Model Context Protocol (MCP)** - Well known Anthropic's open standard that acts like "USB-C for AI applications," enabling standardized bidirectional communication between AI assistants and external systems. It uses RPC, OAuth, and HTTP streaming to provide persistent context and tool access across different applications.
+**Model Context Protocol (MCP)** - Anthropic's well-known open standard that acts like "USB-C for AI applications," enabling standardized bidirectional communication between AI assistants and external systems. It uses RPC, OAuth, and HTTP streaming to provide persistent context and tool access across different applications.
 
-**agents.json** - Wildcard AI's AI-native extension to OpenAPI that enables automatic tool discovery and workflow definition for AI agents. Basically a simple JSON file hosted at ⁠/.well-known/agents.json to expose available tools and their capabilities to AI systems.
+**agents.json** - Wildcard AI's AI-native extension to OpenAPI that enables automatic tool discovery and workflow definition for AI agents. Basically a simple JSON file hosted at /.well-known/agents.json to expose available tools and their capabilities to AI systems.
 
-## 🤝 Inter-Agent Protocols
+## Inter-Agent Protocols
 
 **Agent2Agent Protocol (A2A)** - Google's protocol designed to enable seamless collaboration between AI agents within organizations. It leverages JSON-RPC, Server-Sent Events (SSE), and OpenAPI to facilitate structured communication and coordination between multiple agents.
 
@@ -36,7 +36,7 @@ After watching teams struggle with fragmented agent systems for 2 years, I'm see
 
 **Agora** - A meta-protocol system that enables dynamic protocol negotiation between AI agents using Large Language Models. It allows agents to automatically generate and agree upon communication protocols tailored to specific interaction contexts and requirements.
 
-## 🏭 Domain-Specific Protocols
+## Domain-Specific Protocols
 
 **Language Model Operating System (LMOS)** - Eclipse Foundation's protocol that creates an operating system-like environment for AI agents, particularly focused on IoT integration. It uses JSON-LD and DID to provide interoperability between AI agents and Internet of Things devices in distributed environments.
 

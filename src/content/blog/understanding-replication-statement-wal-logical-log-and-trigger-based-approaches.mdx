@@ -1,5 +1,5 @@
 ---
-title: Understanding Replication - Statement, WAL, Logical Log, and Trigger-Based Approaches
+title: "Database Replication: Statement vs WAL vs Logical vs Trigger"
 description: "Database replication methods compared: statement-based, write-ahead log (WAL), logical log, and trigger-based replication, with the pros and cons of each."
 date: 2025-01-19
 image: /content/images/2025/01/types_of_data_replication_cover_photo_0c353c075a.png
@@ -12,7 +12,7 @@ tags:
 featured: false
 ---
 
-Replication is a fundamental technique in distributed systems for ensuring reliability, availability, and fault tolerance. And it's the foundation of any solid application, preventing your data from disappearing into the void during a failure. Replication is not a one dimensional concept - replication has many forms, each with its advantages, limitations, and applications.
+Replication is a fundamental technique in distributed systems for ensuring reliability, availability, and fault tolerance. And it's the foundation of any solid application, preventing your data from disappearing into the void during a failure. It's also where you run into [the CAP theorem trade-offs](/blog/cap-theorem-for-developers/) between consistency and availability. Replication is not a one-dimensional concept - replication has many forms, each with its advantages, limitations, and applications.
 
 In this article, we'll explore four common forms of replication:
 
@@ -30,7 +30,7 @@ This one's rather simple: the database logs **SQL statements** that get run on t
 * When you run a query like `UPDATE accounts SET balance = balance - 100 WHERE id = 123`, the primary logs that exact SQL statement.
 * The replicas only run the same SQL to catch up.
 
-So you basically mindlessly duplicate SQL commands and not their results, which means that if you want to set some field to random with simple sql statement
+So you basically mindlessly duplicate SQL commands and not their results, which means that if you want to set some field to a random value with a simple SQL statement
 
 ```sql
 UPDATE countries
@@ -38,27 +38,27 @@ SET tax = FLOOR(1 + RAND() * 100)
 WHERE id = 5;
 ```
 
-Then different replicas will get this statement and execute it within their own context and get different value for `tax` field.
+Then different replicas will get this statement and execute it within their own context and get a different value for the `tax` field.
 
 ### Pros:
 
 * **Super lightweight**: Only logs the SQL statements, so it doesn't take up much space.
-* **Easy to grasp**: No rocket science here - can be understood by a child.
+* **Easy to grasp**: No rocket science here - even a child could get it.
 
 ### Cons:
 
-* **Non-deterministic Issues**: Non-deterministic Statement: `RAND()` or NOW() statements are considered non-deterministic statements, as they may provide different answers if they are called multiple times.
+* **Non-deterministic Issues**: Non-deterministic Statement: `RAND()` or `NOW()` statements are considered non-deterministic statements, as they may provide different answers if they are called multiple times.
 * **Side Effects**: Triggers or external dependencies can lead to unexpected results
 
 ### Real-World Use:
 
-It's great for simple, predictable use cases where queries results are determined. If you're building a blog or a small app, this might just do the trick.
+It's great for simple, predictable use cases where query results are deterministic. If you're building a blog or a small app, this might just do the trick.
 
 ---
 
 ## 2. Write-Ahead Log (WAL) Replication
 
-Databases like PostgreSQL user special transaction logs, to record planned changes before they are executed (That's why they are actually called write-AHEAD-logs). This process ensures data integrity and helps to recover from crashes, maintaining the reliability and consistency of the database system. And since they write those logs anyway, why not utilize them for replication?
+Databases like PostgreSQL use special transaction logs to record planned changes before they are executed (That's why they are actually called write-AHEAD-logs). This process ensures data integrity and helps to recover from crashes, maintaining the reliability and consistency of the database system. And since they write those logs anyway, why not utilize them for replication?
 
 This time it is not the statement that we save, but the result of it in a very low-level, detailed way. So low, in fact, that only similar compatible versions of replicas will be able to interpret the original intent.
 
@@ -76,7 +76,7 @@ This time it is not the statement that we save, but the result of it in a very l
 ### Cons:
 
 * **Disk-Intensive**: Writing changes twice (to WAL and the main database) can slow down performance.
-* **Harder Interpreting**: Low-level logs are not human-readable and even computer will have problems with it if versions of master and replica are too different.
+* **Harder Interpreting**: Low-level logs are not human-readable and even a computer will have problems with it if versions of master and replica are too different.
 
 ### Real-World Use:
 
@@ -98,7 +98,7 @@ If **WAL** is too low-level for you, logical log replication steps it up. It log
 
 * **Readable Logs**: Finally, logs that humans can understand! Debugging gets easier.
 * **Cross-Database Compatibility**: You can replicate to different database systems, like MySQL to PostgreSQL. (with extra tools)
-* **Selective Replication**: Only selected tables, columns, or rows can now be replicated, which is was way harder with WAL.
+* **Selective Replication**: Only selected tables, columns, or rows can now be replicated, which was way harder with WAL.
 
 ### Cons:
 
@@ -153,6 +153,6 @@ Perfect for cases where you need fine-grained control, like syncing subsets of d
 
 So, which replication method should you use? It really depends on your use case. If you're all about precision, go for WAL. Need flexibility? Logical logs will do. Working with legacy systems? Trigger-based is the best fit.
 
-Replication isn't magic, but it's one of those tools that can save your system (nervous) when things go south.
+Replication isn't magic, but it's one of those tools that can save your system (and your nerves) when things go south.
 
-Got questions or stories about your replication nightmare/adventure? Share with me in comments or DM!
+Got questions or stories about your replication nightmare/adventure? Share them with me on [LinkedIn](https://www.linkedin.com/in/jklimov/)!

@@ -1,11 +1,19 @@
-import React, { useState, useEffect } from 'react'
+import React, { Suspense, lazy, useState, useEffect } from 'react'
 import { Search } from 'lucide-react'
-import SearchDialog from './SearchDialog'
 import { ErrorBoundary } from './ErrorBoundary'
+
+// The dialog (and FlexSearch) only downloads once search is first used
+const loadDialog = () => import('./SearchDialog')
+const SearchDialog = lazy(loadDialog)
 
 const SearchButton: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false)
+  const [hasOpened, setHasOpened] = useState(false)
   const [shortcut, setShortcut] = useState('⌘K')
+
+  useEffect(() => {
+    if (isOpen) setHasOpened(true)
+  }, [isOpen])
 
   useEffect(() => {
     if (!/Mac|iPhone|iPad/.test(navigator.userAgent)) {
@@ -38,6 +46,8 @@ const SearchButton: React.FC = () => {
       <button
         type="button"
         onClick={() => setIsOpen(true)}
+        onPointerEnter={loadDialog}
+        onFocus={loadDialog}
         className="border-border bg-surface text-muted-foreground hover:text-foreground hover:border-strong flex h-9 cursor-pointer items-center gap-2.5 rounded-full border px-[11px] text-[13px] transition-colors sm:px-3.5"
         title={`Search (${shortcut})`}
         aria-label="Search blog posts"
@@ -50,9 +60,13 @@ const SearchButton: React.FC = () => {
           {shortcut}
         </span>
       </button>
-      <ErrorBoundary>
-        <SearchDialog open={isOpen} onOpenChange={setIsOpen} />
-      </ErrorBoundary>
+      {hasOpened && (
+        <ErrorBoundary>
+          <Suspense fallback={null}>
+            <SearchDialog open={isOpen} onOpenChange={setIsOpen} />
+          </Suspense>
+        </ErrorBoundary>
+      )}
     </ErrorBoundary>
   )
 }

@@ -1,5 +1,5 @@
 ---
-title: "Claude Code Unpacked: What 512k Lines of Leaked Source Tells You About Agentic AI"
+title: "Claude Code Source Leak: What 512k Lines Reveal About Agents"
 description: "Claude Code source leak, unpacked: what 512k lines reveal about the agent loop, 40+ built-in tools, 44 hidden feature flags, and Anthropic's roadmap."
 date: 2026-04-02
 image: /content/images/2026/04/claude-code-unpacked-what-512k-lines-of-leaked-source-tells-you-about-agentic-ai.png
@@ -27,7 +27,7 @@ At the core sits a single-threaded master loop, internally codenamed `nO`. The p
 
 The agent loop itself breaks into roughly 11 discrete stages - from input handling and context injection through to streaming output and state reconciliation. Alongside `nO` runs an async message queue (`h2A`) that handles real-time steering: you can interrupt, redirect, or cancel mid-execution without blowing up the loop's state machine. That's the design bet Anthropic made - debuggability and predictability over raw parallelism. [^1]
 
-Sub-agents exist, but they're leashed. Claude can spawn one sub-agent at a time via the `dispatch_agent` (internally `I2A`/Task Agent) tool. Those sub-agents **cannot spawn their own sub-agents** - depth is hard-limited to one level. You get parallelism for codebase-wide searches or multi-approach explorations, but you don't get recursive agent explosions that are impossible to trace in production.[^1]
+Sub-agents exist, but they're leashed. Claude can spawn one sub-agent at a time via the `dispatch_agent` (internally `I2A`/Task Agent) tool. Those sub-agents **cannot spawn their own sub-agents** - depth is hard-limited to one level. You get parallelism for codebase-wide searches or multi-approach explorations, but you don't get recursive agent explosions that are impossible to trace in production.[^1] [Forked skills (`context: fork`)](/blog/every-knob-in-a-claude-code-skill-md/#the-five-execution-knobs-where-it-gets-interesting) run on the same sub-agent mechanism.
 
 ## What's in the Tool System? (More Than You Think)
 
@@ -80,7 +80,7 @@ The flag list reads like a product roadmap that forgot to ship:
 
 ## What Does This Architecture Tell You About Building Agentic Systems?
 
-Anthropic made a specific, opinionated bet: **a single-threaded master loop with one level of sub-agent depth, deterministic tool guards, and explicit planning artifacts beats a multi-agent swarm in production.** The debuggability argument is real. When something goes wrong in an unconstrained multi-agent system, your observability stack is doing archaeology. With a flat message history and a single main thread, you can replay every decision.
+Anthropic made a specific, opinionated bet: **a single-threaded master loop with one level of sub-agent depth, deterministic tool guards, and explicit planning artifacts beats a multi-agent swarm in production.** The debuggability argument is real. When something goes wrong in an unconstrained multi-agent system, your observability stack is doing archaeology. With a flat message history and a single main thread, you can replay every decision. For contrast, see [how ForgeCode's harness differs](/blog/forgecode-vs-claude-code-which-cli-agent-wins-in-2026/).
 
 The four-layer tool permission system is the same principle. Three cheap deterministic checks gate the expensive AI classifier. You can bolt your own deterministic layer onto it with [hooks](/blog/claude-code-hooks-complete-guide/), which see every tool call before the permission prompt does. Your mean time to recovery (MTTR) on a misbehaving agent drops dramatically when the failure modes are enumerated upfront rather than emergent.
 

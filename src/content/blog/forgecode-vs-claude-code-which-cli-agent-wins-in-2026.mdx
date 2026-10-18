@@ -18,7 +18,7 @@ That gap is enormous. But the benchmark number alone doesn't tell you which tool
 
 ## How Does ForgeCode Beat Claude Code on Benchmarks by 24 Points?
 
-Think of ForgeCode's architecture like a **well-run kitchen brigade**. The head chef (the main agent) doesn't chop onions. She plans the menu, delegates the prep to specialized stations, and only steps in when something complex requires her attention. Claude Code, by contrast, operates more like a single talented cook who does everything herself, from chopping to plating, in one continuous flow. That cook is brilliant, but she burns through energy (context) fast.
+Think of ForgeCode's architecture like a **well-run kitchen brigade**. The head chef (the main agent) doesn't chop onions. She plans the menu, delegates the prep to specialized stations, and only steps in when something complex requires her attention. [Claude Code's agent loop](/blog/claude-code-unpacked-what-512k-lines-of-leaked-source-tells-you-about-agentic-ai/), by contrast, operates more like a single talented cook who does everything herself, from chopping to plating, in one continuous flow. That cook is brilliant, but she burns through energy (context) fast.
 
 ForgeCode's secret isn't a better model. It's a better *harness*. The team identified seven specific failure modes and built runtime-level fixes for each one:
 
@@ -28,7 +28,9 @@ ForgeCode's secret isn't a better model. It's a better *harness*. The team ident
 | Non-interactive + tool-call naming | Unreliable tool dispatch | ~38% |
 | `todo_write` enforcement | Agents forgetting their own plan | 66% |
 | Subagent parallelization + progressive thinking | Wasted context on trivial tasks | 78.4% |
-| Schema flattening + verification enforcement | Model-specific quirks (GPT-5.4, Opus 4.6) | 81.8% |[^2][^3]
+| Schema flattening + verification enforcement | Model-specific quirks (GPT-5.4, Opus 4.6) | 81.8% |
+
+Sources: ForgeCode's own benchmark write-ups.[^2][^3]
 
 The critical insight: **none of these fixes are model-specific.** They operate below the model, at the runtime layer. ForgeCode enforces planning discipline the way a linter enforces code style. The agent doesn't *choose* to update its task list; the runtime *asserts* it. Progressive thinking budgets burn heavy reasoning tokens in the first 10 messages (planning phase), then drop to low thinking for execution. Subagents handle parallelizable grunt work like file reads and pattern searches so the main agent's context stays lean.
 
@@ -47,13 +49,15 @@ Here's the ecosystem gap in raw numbers:
 | Native CI/CD | GitHub Actions, GitLab CI/CD | Manual setup |
 | Model Options | Haiku / Sonnet / Opus (cost tiering) | Any provider (model-agnostic) |
 | Prompt Caching | Automatic, 90% cost reduction on reads | N/A (handled by provider) |
-| Auto-compaction | Built-in context summarization | Manual context management |[^4][^5][^6]
+| Auto-compaction | Built-in context summarization | Manual context management |
+
+Sources: Claude Code docs and a third-party CLI guide.[^4][^5][^6]
 
 Claude Code's prompt caching is particularly clever. Every user running the same version shares a cached system prompt prefix, so Anthropic computes it once. Cache reads cost $0.30/M tokens versus $3.00/M for fresh input. That's a 90% discount that kicks in automatically. The economics of the product literally depend on it.[^7]
 
 Auto-compaction solves context window pressure by summarizing earlier conversation turns, preserving the cache prefix while freeing up token budget. If you've ever watched an agent degrade mid-session because it ran out of context, you know this matters.
 
-The MCP ecosystem is the real moat. Connect Claude Code to Linear, Notion, Google Drive, Sentry, your internal APIs, or any of hundreds of community-built servers. ForgeCode supports MCP as a protocol, but the sheer volume of ready-made integrations tilts heavily toward Claude Code's side. Add [skills](/blog/every-knob-in-a-claude-code-skill-md/) for packaged workflows and hooks for hard guardrails, and the extension surface is hard to match.
+The MCP ecosystem is the real moat. Connect Claude Code to Linear, Notion, Google Drive, Sentry, your internal APIs, or any of hundreds of community-built servers. ForgeCode supports [MCP as a protocol](/blog/wild-west-of-ai-protocols/), but the sheer volume of ready-made integrations tilts heavily toward Claude Code's side. Add [skills](/blog/every-knob-in-a-claude-code-skill-md/) for packaged workflows and hooks for hard guardrails, and the extension surface is hard to match.
 
 ## What Are the Pain Points With Claude Code?
 
@@ -81,7 +85,7 @@ For a stack like React/Next.js on the frontend with Django on the backend, the a
 * You're a small team that values runtime engineering control over plug-and-play integrations
 * You want to avoid rate-limit politics entirely
 
-For most teams shipping production React/Django apps right now, Claude Code is the pragmatic choice. The ecosystem integration saves hours per week. But watch ForgeCode closely. Their ForgeCode Services layer, which includes semantic entry-point discovery, dynamic skill loading, tool-call correction, and automated reasoning budgets, represents the kind of runtime-first thinking that eventually wins in distributed systems.[^2]
+For most teams shipping production React/Django apps right now, Claude Code is the pragmatic choice. The ecosystem integration saves hours per week. But watch ForgeCode closely. Their ForgeCode Services layer, which includes semantic entry-point discovery, dynamic skill loading, tool-call correction, and automated reasoning budgets, represents the kind of runtime-first thinking that eventually wins in [distributed systems](/blog/cap-theorem-for-developers/).[^2]
 
 ## The Architecture That Matters Isn't the Model
 

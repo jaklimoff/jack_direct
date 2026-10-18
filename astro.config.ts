@@ -65,6 +65,11 @@ const legacyRedirects: Record<string, string> = {
     '/blog/cap-theorem-for-developers/',
   '/reflections-on-kotters-8-step-change-model-a-practical-guide-for-navigating-transformation':
     '/blog/reflections-on-kotters-8-step-change-model/',
+  // Renamed so the slug carries the search keyword
+  '/blog/the-warning-my-agent-gave-that-i-never-saw':
+    '/blog/claude-code-mod-open-questions/',
+  '/the-warning-my-agent-gave-that-i-never-saw':
+    '/blog/claude-code-mod-open-questions/',
   '/author/jack': '/about/',
   '/author/jack/page/2': '/about/',
   '/author/jaklimoff': '/about/',

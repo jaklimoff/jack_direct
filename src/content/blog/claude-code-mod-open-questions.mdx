@@ -1,8 +1,8 @@
 ---
-title: "The Warning My Agent Gave That I Never Saw"
-description: "My agent warned me and I scrolled past it. The fix: a 250-line Claude Code mod that keeps the agent's open questions above the prompt."
+title: "A Claude Code Mod So I Never Miss My Agent's Questions"
+description: "A Claude Code mod that keeps your agent's open questions above the prompt: about 250 lines, written by Claude itself, and how to build your own."
 date: 2026-10-17
-image: /content/images/covers/the-warning-my-agent-gave-that-i-never-saw.png
+image: /content/images/covers/claude-code-mod-open-questions.png
 authors:
   - jack-klimov
 tags:
@@ -35,7 +35,7 @@ The first one is what got me.
 
 The obvious fixes are rules. "Always put your questions at the end." "Summarize open questions in bold." They work until the reply gets long, which is exactly when you need them.
 
-I wanted structure instead of discipline. It is easier to give the agent a tool and track its questions in a structured way. Each question becomes a record with an id, not a sentence I have to find. And I can answer only some of them, in plain prompt text, and leave the rest open.
+I wanted structure instead of discipline, which is also [why hooks beat CLAUDE.md rules](/blog/claude-code-hooks-complete-guide/#whats-the-difference-between-a-hook-and-a-claudemd-rule). It is easier to give the agent a tool and track its questions in a structured way. Each question becomes a record with an id, not a sentence I have to find. And I can answer only some of them, in plain prompt text, and leave the rest open.
 
 Claude Code already has a structured option, `AskUserQuestion`. It takes one to four multiple-choice questions and stops the turn until you answer.[^2] That fits when the agent can't go on without you. It doesn't fit the questions an agent collects while it keeps working: free text, not blocking, answered when you get to them.
 
@@ -45,7 +45,7 @@ Anthropic also shipped "You should know", a built-in feature (off by default) wh
 
 A mod is a plugin whose code runs inside Claude Code instead of as a shell command. It can watch an event, change it, or take it over, and it can draw: a pane beside the transcript or a band above the prompt.[^4] Mods shipped in v2.1.287 on 2026-10-01 and are on by default.[^5] No build step: Claude Code loads `.ts` and `.tsx` files directly.
 
-A plugin becomes a mod when its `hooks/hooks.json` names a module:
+A plugin becomes a mod when its `hooks/hooks.json`, the file that normally holds its [Claude Code hooks](/blog/claude-code-hooks-complete-guide/), names a module:
 
 ```json
 { "modules": ["./open-questions.tsx"] }
@@ -116,7 +116,7 @@ It also doesn't draw in the VS Code extension, and `/clear`, `/resume` and `/bra
 People look for ready solutions: someone's config, someone's plugin pack. Right now the best thing you can do is learn to customize the tool yourself.
 
 1. Pick one annoyance that keeps coming back in your own setup. Mine was a warning I scrolled past.
-2. Ask Claude to write the mod. Claude Code has a built-in `plugin-authoring` skill for exactly this, and it reloads the mod as you go.[^9]
+2. Ask Claude to write the mod. Claude Code has a built-in `plugin-authoring` skill for exactly this ([how Claude Code skills work](/blog/every-knob-in-a-claude-code-skill-md/)), and it reloads the mod as you go.[^9]
 3. Use it for a day and write down every time it gets in your way. Each note is the next commit.
 
 Or start from mine. The code, the tests and the install line are in [jaklimoff/claude-open-questions](https://github.com/jaklimoff/claude-open-questions):

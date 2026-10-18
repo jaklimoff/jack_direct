@@ -34,14 +34,16 @@ const orbit = [
 const heroDescription =
   'Putting AI agents to work in engineering teams: agentic coding, distributed systems, and the teams that ship them.'
 
+const HOME_TITLE = `${SITE.title}: AI agents in engineering teams`
+
 const homeSchema = {
   '@context': 'https://schema.org',
   '@graph': [await getPersonSchema(), websiteSchema()],
 }
 ---
 
-<Layout flush>
-  <PageHead slot="head" title={SITE.title} fullTitle={true} />
+<Layout flush title={HOME_TITLE}>
+  <PageHead slot="head" title={HOME_TITLE} fullTitle={true} />
 
   <script
     is:inline

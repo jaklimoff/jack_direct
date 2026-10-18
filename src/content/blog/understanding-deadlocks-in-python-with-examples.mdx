@@ -1,5 +1,5 @@
 ---
-title: Understanding Deadlocks in Python with Examples
+title: "Python Deadlocks: Causes, Examples and How to Avoid Them"
 description: "Python deadlocks explained with examples: circular wait, self-deadlock, and starvation, plus 7 ways to avoid them, from lock ordering to timeouts."
 date: 2024-05-19
 image: /content/images/2024/06/1-2ncek-igrwx5zopqyfjf-q.png
@@ -87,7 +87,7 @@ For critical applications, implement monitoring mechanisms that can detect and r
 
 ### 7. Use Concurrency Libraries
 
-Leverage higher-level concurrency libraries like `concurrent.futures` to abstract away the complexity of thread management.
+Leverage higher-level concurrency libraries like `concurrent.futures` to abstract away the complexity of thread management. If you still need to coordinate threads yourself, the `threading` module also gives you [semaphores and barriers](/blog/python-threading-semaphores-and-barriers/).
 
 ![Concurrency Libraries Example](/content/images/2024/06/1-h02yanwbqgsigajc2ap0bq.png)
 

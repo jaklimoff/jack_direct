@@ -1,5 +1,5 @@
 ---
-title: Note about Smart Pointers In Rust
+title: "Rust Smart Pointers Cheat Sheet: Box, Rc, Arc, RefCell, Cow"
 description: "Rust smart pointers cheat sheet: Box, Rc, Arc, RefCell, Cell, Cow, Mutex, and RwLock, with examples and a table of when to use each one."
 date: 2025-01-27
 image: https://images.unsplash.com/photo-1452174344330-c4343dc1cb8f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3wxMTc3M3wwfDF8c2VhcmNofDYxfHxwb2ludHxlbnwwfHx8fDE3Mzc5ODA1ODF8MA&ixlib=rb-4.0.3&q=80&w=1600&auto=format
@@ -109,14 +109,14 @@ cell.set(24); // No need for borrow checks
 
 ```rust
 use std::borrow::Cow;
-let cow = Cow::Borrowed("hello");
-let owned: Cow<_> = cow.to_mut(); // Clones only if mutated
+let mut cow = Cow::Borrowed("hello"); // No allocation yet
+cow.to_mut().push_str(" world"); // Clones into an owned String only now, on mutation
 ```
 
 ### 7. `Mutex<T>` and `RwLock<T>`
 
 * **Purpose**: Thread-safe interior mutability.
-  * `Mutex`: Exclusive locking (one writer at a time).
+  * `Mutex`: Exclusive locking (one writer at a time). Take multiple locks in a consistent order to avoid [deadlocks](/blog/understanding-deadlocks-in-python-with-examples/).
   * `RwLock`: Only allows multiple readers or one writer.
   * Used with `Arc` for shared ownership across threads.
 

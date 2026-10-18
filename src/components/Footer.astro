@@ -2,8 +2,8 @@
 import { SITE, SOCIAL_LINKS } from '@/consts'
 
 const links = [
-  { href: '/blog', label: 'blog' },
-  { href: '/about', label: 'about' },
+  { href: '/blog/', label: 'blog' },
+  { href: '/about/', label: 'about' },
   { href: '/rss.xml', label: 'rss' },
   ...SOCIAL_LINKS.filter((l) => l.label !== 'Medium').map((l) => ({
     href: l.href,
