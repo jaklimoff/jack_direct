@@ -4,7 +4,8 @@
 // Production builds generate no pages here.
 import Cover from '@/components/Cover.astro'
 import { COVERS } from '@/lib/covers'
-import { getPostReadingTime } from '@/lib/data-utils'
+import { getEntry } from 'astro:content'
+import { calculateWordCountFromHtml, readingTime } from '@/lib/utils'
 import '@/styles/global.css'
 
 export function getStaticPaths() {
@@ -18,8 +19,14 @@ export function getStaticPaths() {
 const { slug } = Astro.params
 const theme = Astro.url.searchParams.get('theme') === 'light' ? 'light' : 'dark'
 const ids = Object.keys(COVERS)
+// getEntry, not getPostReadingTime: a draft's cover is rendered before it is published
 const readTimes = Object.fromEntries(
-  await Promise.all(ids.map(async (id) => [id, await getPostReadingTime(id)])),
+  await Promise.all(
+    ids.map(async (id) => {
+      const post = await getEntry('blog', id)
+      return [id, readingTime(post ? calculateWordCountFromHtml(post.body ?? '') : 0)]
+    }),
+  ),
 )
 ---
 
