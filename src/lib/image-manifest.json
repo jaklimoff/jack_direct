@@ -59,6 +59,11 @@
     "height": 800,
     "webp": "/content/images/2026/10/open-questions-demo.webp"
   },
+  "/content/images/2026/10/when-not-to-use-rag-memory-graph.png": {
+    "width": 2400,
+    "height": 1758,
+    "webp": "/content/images/2026/10/when-not-to-use-rag-memory-graph.webp"
+  },
   "/content/images/covers/cap-theorem-for-developers.png": {
     "width": 2400,
     "height": 1260,
@@ -103,6 +108,11 @@
     "width": 2400,
     "height": 1260,
     "webp": "/content/images/covers/reflections-on-kotters-8-step-change-model.webp"
+  },
+  "/content/images/covers/when-not-to-use-rag-log-your-misses-first.png": {
+    "width": 2400,
+    "height": 1260,
+    "webp": "/content/images/covers/when-not-to-use-rag-log-your-misses-first.webp"
   },
   "/content/images/covers/wild-west-of-ai-protocols.png": {
     "width": 2400,

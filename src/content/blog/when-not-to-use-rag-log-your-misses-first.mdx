@@ -1,0 +1,221 @@
+---
+title: "When Not to Use RAG: Log Your Misses First"
+description: "Most empty searches in my agent's memory were plumbing, not meaning. When not to use RAG: a week of logs, and bge-m3 against an LLM judge."
+date: 2026-10-19
+image: /content/images/covers/when-not-to-use-rag-log-your-misses-first.png
+authors:
+  - jack-klimov
+tags:
+  - ai
+  - agents
+  - rag
+featured: true
+draft: false
+---
+
+{/* map: intro / a memory small enough to read / what the 11 empty searches were / a reranker with nobody in front / embeddings vs the judge (bge-m3 test) / why Claude Code and Cursor dropped RAG / when RAG is right / what to build before RAG */}
+
+The default for agent memory gets decided before anyone measures anything: chunk it, embed it, buy a vector database. I kept a boring full-text index instead. After a week I went back through every search my agent had run, to see what the skipped step would have bought me.
+
+57 searches. 11 came back empty. Two were the kind of miss embeddings fix. The other 9 were plumbing. That's my short answer to when not to use RAG: when you don't know yet what your search misses.
+
+This post is about embedding-based RAG: an embedding model, a vector store, the top-k chunks pasted into the prompt. My setup retrieves too. The question isn't whether to retrieve. It's whether to add the embedding model before you have a log.
+
+## A Memory Small Enough to Read
+
+The memory is a private side project: long-term memory for my Claude Code sessions. Markdown notes are the source of truth, with relations and grouping between them, plus clean transcripts of past sessions. It started as a small graph of markdown files, and RAG was obviously overkill for that.
+
+So the search side is boring on purpose. One SQLite file with an FTS5 index and the `trigram` tokenizer, so substring search works the same for Russian and English.[^1] An MCP server with `search_notes` and `search_transcripts`, ranked by BM25. And a `UserPromptSubmit` hook that pushes relevant notes into the context on every prompt, because a model doesn't search for what it doesn't know exists.
+
+Here's the whole memory as a graph, labels blurred because some notes are personal: one box per project, global facts and the always-loaded rules in the middle.
+
+![The memory as a graph: one box per project holding its notes, global facts and the always-loaded rules clustered in the middle, thin lines for relations between notes. Labels are blurred.](/content/images/2026/10/when-not-to-use-rag-memory-graph.png)
+
+Today that's 214 live notes and about 11,000 transcript messages. I set one rule about vectors: "Embeddings only once FTS misses are collected." Then I didn't build the part that collects them, not until this post. So a week in, I read the raw session logs instead.
+
+## What Were the 11 Empty Searches?
+
+The best one came on the day I wired in Jev, the yes/no model this post gets to in a minute. My agent searched memory for "JEV" and got nothing in both stores. The conversation where Jev came up hadn't been indexed yet. The memory couldn't remember what it had learned that day.
+
+Day one had its own moment: `unable to open database file`. The rest sorted like this:
+
+| Why it came back empty | Searches | Would embeddings help? |
+|:---|:---|:---|
+| A meaning miss: another language or a synonym | 2 | Maybe |
+| The session wasn't indexed yet | 5 | No |
+| Looked in notes; it was only in transcripts | 2 | No |
+| The word only appeared in tool output, which isn't indexed | 1 | No |
+| Database error on day one | 1 | No |
+
+```mermaid alt="A search goes through three steps: export and index the conversation, search notes or transcripts, match the words. Six of the 11 empty searches broke at the index step, three at the search step, and two at matching words, the only step embeddings change." caption="Where the 11 empty searches broke. Embeddings only change the last step."
+flowchart TD
+  idx["`**Export and index the conversation**
+  Not indexed yet: 5
+  Word only in tool output: 1`"]
+  store["`**Search notes or transcripts**
+  Wrong store: 2
+  Database error: 1`"]
+  match["`**Match the words**
+  Meaning miss: 2`"]
+  idx --> store --> match
+  match -.- emb["Embeddings help only here"]
+  classDef here stroke-width:3px
+  class match here
+```
+
+Nine plumbing misses, and not one of them cares what you embed with. A stale index stays stale with vectors on top. The biggest class, "not indexed yet", is a scheduling problem: the index rebuilds when a session ends and once a night. The export and the index both cope with a session that's still running; they just don't get called until some session ends. A hook after every turn fixes it in under a second, and I wired one in while writing this.
+
+The meaning misses are more fun. An agent searched for "contrarian" and got nothing, because the conversation it wanted had happened in Russian. It retried with a Russian word stem for "objection" and found it. That's a textbook case for embeddings. The second was a Russian medical abbreviation, where the note says it in English.
+
+Then there was "ментор", Russian for "mentor". I first filed it as a correct empty, since nothing indexed mentioned mentors. On a second look, the session that ran the search had been about mentors since its first message that morning. The search came from a subagent, which doesn't see its parent's context, and the parent wasn't indexed because it was still running. So it wasn't a meaning miss at all, just a fifth "not indexed yet". The agent's English retry did "find" something, though: a September message about reusing the implementor session. Trigram search matches substrings, and "mentor" lives inside "implementor".
+
+That last one is the failure my count can't see. I counted empty results. A search that returns the wrong thing looks like a success in the log, and my own server makes that the likelier failure: it runs an AND query first, then falls back to OR on any word, so a multi-word search almost never comes back empty. So this count can't tell you what embeddings would save me overall. It only tells you that most of the empty searches had nothing to do with meaning.
+
+## A Reranker With Nobody in Front of It
+
+The more interesting part is recall, the notes the hook pushes in without being asked. It runs on Jev, TypeSafe's System One: a model that answers yes/no questions with calibrated probabilities. On every prompt, the hook asks it one question per note the session may see: would showing this note help answer this message? Notes at 0.6 or above get shown, at most 3. 
+
+"May see" is scope, not relevance: global notes, the current project's notes, and related projects', minus the handful of rules every session loads and the notes this session was already shown. There's no search step in front of Jev. In a normal pipeline a retriever picks the top 50 and a reranker reads them. My pool is 33 notes on a median prompt, so the retriever has nothing to do and the reranker reads everything.
+
+```mermaid alt="Left: the usual RAG pipeline, where a retriever picks the top 50 by similarity, a reranker orders them, and the top k always go into the prompt. Right: the recall hook, where the pool is picked by scope with no search, Jev answers yes or no for each note, notes at 0.6 or above are shown, at most 3, and on 84% of prompts nothing is shown." caption="A usual RAG pipeline next to the recall hook: no retriever in front, and silence is an allowed answer."
+flowchart LR
+  subgraph usual["Usual RAG"]
+    direction TB
+    q1["Query"] --> r1["Retriever: top 50 by similarity"]
+    r1 --> k1["Reranker"]
+    k1 --> t1["Top k into the prompt, every time"]
+  end
+  subgraph mine["The recall hook"]
+    direction TB
+    q2["Prompt"] --> p2["Pool by scope, no search: 33 notes"]
+    p2 --> j2["Jev: yes or no, for each note"]
+    j2 --> s2["p ≥ 0.6: at most 3 notes shown"]
+    j2 --> n2["Below 0.6: nothing shown, on 84% of prompts"]
+  end
+  usual ~~~ mine
+```
+
+From 14 to 19 October that was 432 prompts and about 15,000 yes/no judgments. The Jev call took a median of 357 ms and about 6,300 input tokens, and it never once fell back to the keyword scorer behind it. Good, because that scorer found 5 of the 13 eval notes to Jev's 8, and since facts left the always-loaded index, this hook is how most of them reach a session. One vendor's uptime is now load-bearing for my memory. The hook showed a note on 71 of those prompts, 16%. The rest got silence.
+
+It isn't free, and it isn't private. Those five days took about 2.9 million input tokens, which at the list price of $0.042 per million is about 12 cents.[^2] The privacy cost is bigger: every prompt, scrubbed only of the secret formats I know to look for, plus each eligible note's name, description and first 300 characters, goes to an API. The privacy case against a hosted embedding API isn't "nobody sees your notes". It's a second vendor and a second copy.
+
+Why not skip the judge and paste the notes into the prompt? Anthropic's advice for a knowledge base under about 200,000 tokens is exactly that.[^3] The fair version isn't all 214 notes; it's the pool a session may see: 37 to 80 notes today, depending on the project, roughly 5,000 to 20,000 tokens, loaded once and cached. That's cheap enough to work, and my reason for not doing it doesn't survive a second look. In this blog's project, 35 of the pool's 52 notes are global, and 23 of those are personal facts about me. I'd just taken them out of the always-loaded index, which went from about 5,700 characters to under 2,000, so they'd stop riding along in every coding session. But the judge still read all 23 on every prompt of every project, and sent them to a second vendor. The pool was scoped by what's true everywhere, not by what a session should see. That was a scoping gap, not a privacy design, and the fix was a flag per project.
+
+So writing this post changed the system. Personal notes now stay out of every project I haven't marked as personal. The index updates after every turn, which kills the biggest miss class. And the search log this whole post is about finally exists. Next, from my design doc: a nightly pass that marks which injected notes actually got used, and embeddings for Russian-English search over transcripts, still behind the rule that the misses get collected first. Now they will be.
+
+## Would Embeddings Have Beaten the Judge?
+
+The fair objection: Jev was only ever compared with a keyword scorer. Maybe embeddings do better. So I ran bge-m3, a multilingual embedding model, locally on the same 20 hand-picked eval prompts. Same pool per prompt, same note text Jev sees. 13 prompts want a note; 7 should show nothing.
+
+| Judge | Found a wanted note (of 13) | Stayed quiet (of 7) | Wrong notes shown |
+|:---|:---|:---|:---|
+| Jev, p ≥ 0.6 | 8 | 7 | 6 |
+| Keyword stems | 5 | 7 | 7 |
+| bge-m3, always top 3 | 9 | 0 | 50 |
+| bge-m3, best cosine cutoff (0.50) | 8 | 6 | 15 |
+| bge-m3, cutoff that keeps all 7 quiet (0.57) | 5 | 7 | 5 |
+
+"Found" counts prompts where at least one wanted note was shown (two prompts want two). "Wrong notes" is the total of unwanted notes shown across all 20 prompts, at most 3 per prompt.
+
+As a ranker, bge-m3 is good. It put a wanted note in its top 3 on 9 of 13 prompts, one better than Jev. Plain top-3 can't say no, though: it shows three notes on every prompt, including the 7 that wanted nothing.
+
+The standard fix is a cosine cutoff, and here it's a knife-edge. When a note was wanted, the best score ran from 0.45 to 0.69. When nothing was wanted, it ran from 0.43 to 0.57. The ranges overlap, so every cutoff trades one failure for the other. At 0.50 it matches Jev's 8 finds with two and a half times the wrong notes. At 0.57 it finally stays quiet and finds 5. Move the cutoff by 0.02 and the wrong notes swing by 5 to 8. On these 20 cases, Jev's cutoff gave the better balance of finds and junk. I won't claim more than that: a vendor's calibrated probability is calibrated on their data, not mine, and both cutoffs here were tuned on the same cases.
+
+Embeddings win on speed and privacy: 39 ms per prompt on a laptop GPU against Jev's ~350 ms over the network, and nothing leaves the machine. The price is a 2.27 GB model that has to stay loaded.
+
+Two more results worth knowing. bge-m3 is multilingual, and it showed no edge on Russian here: of the 4 Russian prompts that wanted a note, each found 1. The likelier culprit is my notes: they're mostly written in English, so neither judge has much to match a Russian prompt against. And of Jev's 5 misses, bge-m3 caught 2 in its top 3, both English.
+
+Caveats, loudly. 20 cases, one user. Every cutoff here, Jev's 0.6 included, was picked on the same 20 cases it was scored on; nothing was held out. I tested only bge-m3's dense mode, with no reranker. Nothing yet measures whether an injected note actually got used. And two of Jev's 6 wrong notes were personal notes shown on prompts that wanted none. It's a smoke test, not a benchmark.
+
+## Why Don't Claude Code and Cursor Use RAG?
+
+The coding agents walked the same road at a scale that makes my week look like a rounding error. Claude Code started on a vector index and dropped it for [agentic grep](/blog/claude-code-unpacked-what-512k-lines-of-leaked-source-tells-you-about-agentic-ai/); Boris Cherny calls the decision "mostly vibes", plus some internal benchmarks.[^4]
+
+Cursor is the one worth reading closely. In November 2025 it measured a 12.5% accuracy gain from semantic search and published it.[^5] By mid-2026 its docs said it "does not store embeddings of your codebase for search",[^6] because the models had got good enough at grep that the semantic path was "no longer helping in a meaningful way".[^7] The gain was real, and the index still went.
+
+Their mechanism isn't mine: their model drives the search, my hook pushes notes. The lesson is the same, though: keep the index while you can measure what it buys, and drop it when you can't.
+
+## When Should You Use RAG?
+
+Embeddings win in real cases, and both of my meaning misses look like candidates. Use them when:
+
+- **The corpus is too big to judge or to fit in the prompt.** Thousands of documents: a support knowledge base with 10,000 articles, a company's Slack and Confluence. A judge that reads every note stops scaling long before that.
+- **Users search in another language than the docs.** A trigram index can't match a Russian word to its English twin at all. On BGE-M3's own benchmark (MKQA, Recall@100), Russian cross-lingual recall is 76.2 for dense embeddings against 33.2 for BM25.[^8] My 20 cases didn't show that gap, but they're 20 cases.
+- **People don't know the words.** "Can't sleep" against "insomnia" in support tickets. Prose written weeks apart in different words is vocabulary mismatch, and lexical search loses there.
+- **Every query must take milliseconds and no LLM tokens.** Product search, autocomplete, high query volume.
+
+Even then, go hybrid. In Anthropic's Contextual Retrieval tests, the top-20 retrieval failure rate was 5.7% with embeddings alone and 1.9% with contextual embeddings, contextual BM25 and a reranker.[^3] Keep the lexical side for exact identifiers like "TS-999", which an embedding model can miss.[^3]
+
+## What to Build Before You Use RAG
+
+Building agent memory, internal search, or a "chat with our docs" feature? Start lexical, and build the log I didn't have:
+
+1. SQLite FTS5 with BM25. One file, no model, rebuilds in seconds.
+2. Log every search with how many results it returned, and mark the retry that follows an empty one.
+3. Keep 20 hand-picked eval cases, including prompts that should return nothing.
+4. If the corpus is small, put an LLM judge over the candidates.
+5. Add embeddings only for the miss class you've measured.
+
+Steps 1 and 2 fit in about 25 lines:
+
+```python
+import json
+import sqlite3
+import time
+
+db = sqlite3.connect(":memory:")  # a demo; for real use, a file and db.commit()
+db.execute("CREATE VIRTUAL TABLE notes USING fts5(name, body, tokenize='trigram')")
+db.execute("INSERT INTO notes VALUES (?, ?)", ("deploy", "Release with release/deploy.sh, never on Friday"))
+last_miss = None  # (time, query) of the last search that found nothing
+
+
+def search(query: str, limit: int = 5) -> list[str]:
+    global last_miss
+    # Trigram matches substrings of 3+ characters; shorter words can't match at all.
+    terms = [t for t in query.split() if len(t) >= 3]
+    match = " AND ".join('"' + t.replace('"', '""') + '"' for t in terms)
+    sql = "SELECT name FROM notes WHERE notes MATCH ? ORDER BY bm25(notes) LIMIT ?"
+    rows = db.execute(sql, (match, limit)).fetchall() if terms else []
+    entry = {"ts": time.time(), "query": query, "returned": len(rows)}
+    # A crude guess: any search within 2 minutes of an empty one counts as its retry.
+    if last_miss and entry["ts"] - last_miss[0] < 120:
+        entry["retry_of"] = last_miss[1]
+    with open("searches.jsonl", "a") as log:
+        log.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    last_miss = None if rows else (entry["ts"], query)
+    return [name for (name,) in rows]
+
+
+print(search("Friday deploy"))  # ['deploy']
+print(search("push to prod"))   # [], logged with returned: 0
+print(search("deploy.sh"))      # ['deploy'], logged as a retry of "push to prod"
+print(search('deploy"'))        # [], and a stray quote doesn't crash it
+```
+
+Once a week, read `searches.jsonl` and tag the misses: not indexed yet, wrong store, exact identifier, other language, paraphrase. Embeddings can only help with the last two. Then read a few searches that did return something, because "mentor" finding "implementor" never shows up as a miss.
+
+```mermaid alt="Log every search for two weeks, then tag each empty one. Not indexed yet or wrong store means fixing the plumbing. Other language or paraphrase leads to a question: more than once a day? If no, keep the full-text index and add an LLM judge if the corpus is small. If yes, add embeddings next to the full-text index." caption="What the tags tell you to build."
+flowchart TD
+  log["Log every search for two weeks"] --> tag["Tag each empty one"]
+  tag --> plumb["Not indexed yet, wrong store"]
+  tag --> lang["Other language, paraphrase"]
+  plumb --> fix["Fix the plumbing: index sooner, search both stores"]
+  lang --> often{"More than once a day?"}
+  often -- "no" --> keep["Keep full-text; an LLM judge if the corpus is small"]
+  often -- "yes" --> emb["Add embeddings next to full-text, not instead"]
+```
+
+My trigger for this memory: about one meaning miss a day, or Jev judging 80 to 100 notes per prompt. Both numbers are picked, not measured. I can count meaning misses only now that the search log exists, and pool size barely moves latency: 352 ms at 20 to 29 notes, 394 ms at 50 to 59. What grows is tokens, about 200 per note, and how much of my memory a second vendor reads on every prompt. Some prompts already reach 70 notes. When the pool needs a cap, embeddings come in, next to the full-text index rather than instead of it.
+
+So: log your misses for two weeks before you buy a vector database. If the tags say "other language" and "paraphrase" more than once a day, go buy it, and keep the full-text index next to it for the identifiers. If they say "not indexed yet" and "wrong store", you have a cron problem, and no embedding model has ever fixed a cron problem.
+
+The recall hook here is a plain Claude Code hook. If you haven't wired one yet, start with [the hooks guide](/blog/claude-code-hooks-complete-guide/).
+
+[^1]: https://www.sqlite.org/fts5.html
+[^2]: https://simonwillison.net/2026/Sep/21/jev
+[^3]: https://www.anthropic.com/news/contextual-retrieval
+[^4]: https://www.latent.space/p/claude-code
+[^5]: https://cursor.com/blog/semsearch
+[^6]: https://cursor.com/docs/agent/tools/search
+[^7]: https://forum.cursor.com/t/what-do-you-think-about-cursor-removing-the-codebase-indexing-settings/165899
+[^8]: https://arxiv.org/abs/2402.03216

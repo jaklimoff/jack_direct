@@ -1,4 +1,27 @@
 {
-  "stamp": "",
-  "diagrams": {}
+  "stamp": "42e924d163d9",
+  "mermaid": "12.1.0",
+  "diagrams": {
+    "87d565585ca2": {
+      "width": 294,
+      "height": 383,
+      "posts": [
+        "when-not-to-use-rag-log-your-misses-first"
+      ]
+    },
+    "7bcaabfc9fb2": {
+      "width": 968,
+      "height": 373,
+      "posts": [
+        "when-not-to-use-rag-log-your-misses-first"
+      ]
+    },
+    "ecb0f69c823f": {
+      "width": 735,
+      "height": 617,
+      "posts": [
+        "when-not-to-use-rag-log-your-misses-first"
+      ]
+    }
+  }
 }

@@ -66,6 +66,36 @@ export interface CoverSpec {
 }
 
 export const COVERS: Record<string, CoverSpec> = {
+  'when-not-to-use-rag-log-your-misses-first': {
+    kicker: 'Agent memory',
+    short: 'When not to use RAG: log your misses first',
+    stat: '9 of 11 misses were plumbing',
+    diagram: {
+      kind: 'graph',
+      nodes: [
+        { t: 'prompt', x: 50, y: 50, hot: true },
+        { t: 'deploy.md', x: 16, y: 20, hot: true },
+        { t: 'release.md', x: 84, y: 20, hot: true },
+        { t: 'mentors.md', x: 88, y: 66 },
+        { t: 'voice.md', x: 50, y: 84 },
+        { t: 'fts5.md', x: 12, y: 66 },
+        { t: 'jev.md', x: 50, y: 12 },
+      ],
+      edges: [
+        { from: 0, to: 1, label: 'yes', hot: true },
+        { from: 0, to: 2, label: 'yes', hot: true },
+        { from: 0, to: 3, label: 'no' },
+        { from: 0, to: 4, label: 'no' },
+        { from: 0, to: 5, label: 'no' },
+        { from: 0, to: 6, label: 'no' },
+        { from: 1, to: 6 },
+        { from: 5, to: 4 },
+        { from: 3, to: 2 },
+      ],
+      caption: 'One yes or no per note, at most 3 shown',
+    },
+  },
+
   'claude-code-mod-open-questions': {
     kicker: 'A Claude Code mod',
     short: 'The warning my agent gave that I never saw',
