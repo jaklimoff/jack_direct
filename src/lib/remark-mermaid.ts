@@ -33,7 +33,8 @@ const attr = (meta: string | null | undefined, name: string) =>
  * optional caption. Fails the build when a block was not rendered yet.
  */
 export function remarkMermaid() {
-  return (tree: MdNode, file: { path?: string }) => walk(tree, file.path ?? 'a post')
+  return (tree: unknown, file: { path?: string }) =>
+    walk(tree as MdNode, file.path ?? 'a post')
 }
 
 function walk(node: MdNode, path: string) {
