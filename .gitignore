@@ -22,3 +22,6 @@ teaser.pptx
 playwright-report/
 test-results/
 docs
+
+# Cover previews for the jack_direct dashboard (BARE=1 node scripts/render-covers.mjs)
+public/content/images/covers/_preview/

@@ -12,11 +12,16 @@ export function getStaticPaths() {
   if (import.meta.env.PROD) return []
   return [
     { params: { slug: undefined } },
-    ...Object.keys(COVERS).map((slug) => ({ params: { slug } })),
+    ...Object.keys(COVERS).flatMap((slug) => [
+      { params: { slug } },
+      { params: { slug: `${slug}--bare` } },
+    ]),
   ]
 }
 
-const { slug } = Astro.params
+// /covers/<id>--bare: the cover as the post page shows it (no text), for previews
+const bare = Astro.params.slug?.endsWith('--bare') ?? false
+const slug = Astro.params.slug?.replace(/--bare$/, '')
 const theme = Astro.url.searchParams.get('theme') === 'light' ? 'light' : 'dark'
 const ids = Object.keys(COVERS)
 // getEntry, not getPostReadingTime: a draft's cover is rendered before it is published
@@ -84,12 +89,16 @@ const readTimes = Object.fromEntries(
     {
       slug ? (
         <div class="og">
-          <Cover
-            id={slug}
-            theme={theme}
-            ratio={1200 / 630}
-            readTime={readTimes[slug]}
-          />
+          {bare ? (
+            <Cover id={slug} theme={theme} bare ratio={2.4} />
+          ) : (
+            <Cover
+              id={slug}
+              theme={theme}
+              ratio={1200 / 630}
+              readTime={readTimes[slug]}
+            />
+          )}
         </div>
       ) : (
         <div class="sheet">
