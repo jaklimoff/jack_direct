@@ -125,7 +125,7 @@ Embeddings win on speed and privacy: 39 ms per prompt on a laptop GPU against Je
 
 Two more results worth knowing. bge-m3 is multilingual, and it showed no edge on Russian here: of the 4 Russian prompts that wanted a note, each found 1. The likelier culprit is my notes: they're mostly written in English, so neither judge has much to match a Russian prompt against. And of Jev's 5 misses, bge-m3 caught 2 in its top 3, both English.
 
-Caveats, loudly. 20 cases, one user. Every cutoff here, Jev's 0.6 included, was picked on the same 20 cases it was scored on; nothing was held out. I tested only bge-m3's dense mode, with no reranker. Nothing yet measures whether an injected note actually got used. And two of Jev's 6 wrong notes were personal notes shown on prompts that wanted none. It's a smoke test, not a benchmark.
+Caveats, loudly. 20 cases, one user. Every cutoff here, Jev's 0.6 included, was picked on the same 20 cases it was scored on; nothing was held out. I tested only bge-m3's dense mode, with no reranker. Nothing yet measures whether an injected note actually got used. And two of Jev's 6 wrong notes were personal notes shown on prompts that didn't ask for them. It's a smoke test, not a benchmark.
 
 ## Why Don't Claude Code and Cursor Use RAG?
 
