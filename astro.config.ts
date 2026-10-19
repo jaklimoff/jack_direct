@@ -15,6 +15,7 @@ import rehypePrettyCode from 'rehype-pretty-code'
 import remarkEmoji from 'remark-emoji'
 import remarkMath from 'remark-math'
 import { rehypeOptimizedImages } from './src/lib/rehype-optimized-images'
+import { remarkMermaid } from './src/lib/remark-mermaid'
 
 import { pluginCollapsibleSections } from '@expressive-code/plugin-collapsible-sections'
 import { pluginLineNumbers } from '@expressive-code/plugin-line-numbers'
@@ -189,6 +190,7 @@ export default defineConfig({
         },
       ],
     ],
-    remarkPlugins: [remarkMath, remarkEmoji],
+    // remarkMermaid first, so ```mermaid never reaches the code highlighters
+    remarkPlugins: [remarkMermaid, remarkMath, remarkEmoji],
   },
 })

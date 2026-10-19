@@ -238,3 +238,27 @@
 .pt-safe {
   padding-top: env(safe-area-inset-top, 0.75rem);
 }
+
+/* Mermaid diagrams (scripts/render-diagrams.mjs): one SVG per theme */
+.diagram {
+  margin: 2rem auto;
+  text-align: center;
+}
+.diagram img {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+}
+.diagram .diagram-dark,
+[data-theme='dark'] .diagram .diagram-light {
+  display: none;
+}
+[data-theme='dark'] .diagram .diagram-dark {
+  display: block;
+}
+.diagram figcaption {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--muted-foreground);
+}

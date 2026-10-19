@@ -26,7 +26,8 @@
     "new-post": "npx tsx scripts/new-post.ts",
     "covers": "node scripts/render-covers.mjs",
     "favicons": "node scripts/render-favicons.mjs",
-    "images": "node scripts/optimize-images.mjs"
+    "images": "node scripts/optimize-images.mjs",
+    "diagrams": "node scripts/render-diagrams.mjs"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.5",
@@ -71,6 +72,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.59.0",
+    "mermaid": "12.1.0",
     "prettier": "^3.6.2",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-astro-organize-imports": "^0.4.11",
