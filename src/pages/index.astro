@@ -1,5 +1,7 @@
 ---
 import Cover from '@/components/Cover.astro'
+import { getCover } from '@/lib/covers'
+import { getImageInfo } from '@/lib/images'
 import HeroDots from '@/components/HeroDots.astro'
 import PageHead from '@/components/PageHead.astro'
 import Timeline from '@/components/Timeline.astro'
@@ -238,7 +240,22 @@ const homeSchema = {
                     class="group border-border bg-surface hover:border-strong flex h-full flex-col gap-4 rounded-[18px] border p-2 pb-5 transition-colors"
                   >
                     <div class="overflow-hidden rounded-xl">
-                      <Cover id={post.id} bare />
+                      {getCover(post.id) ? (
+                        <Cover id={post.id} bare />
+                      ) : post.data.image ? (
+                        // An illustration cover: the post's image, cropped to the same 16:9 as the drawn covers
+                        <picture>
+                          {getImageInfo(post.data.image) && (
+                            <source srcset={getImageInfo(post.data.image)!.webp} type="image/webp" />
+                          )}
+                          <img
+                            src={post.data.image}
+                            alt=""
+                            loading={i === 0 ? 'eager' : 'lazy'}
+                            class="block aspect-video h-auto w-full object-cover object-right"
+                          />
+                        </picture>
+                      ) : null}
                     </div>
                     <div class="grid grid-cols-[36px_minmax(0,1fr)] gap-2 px-3">
                       <span
