@@ -11,6 +11,8 @@ const blog = defineCollection({
     updated: z.coerce.date().optional(),
     order: z.number().optional(),
     image: z.string().optional(),
+    // og:image when it should differ from the hero `image` (e.g. an illustration plus the headline)
+    social: z.string().optional(),
     tags: z.array(z.string()).optional(),
     authors: z.array(z.string()).optional(),
     draft: z.boolean().optional(),

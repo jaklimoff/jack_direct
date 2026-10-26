@@ -40,8 +40,9 @@ export async function getStaticPaths() {
 const post = Astro.props
 const currentPostId = Astro.params.id
 
-const postImage = post.data.image
-  ? new URL(post.data.image, Astro.site).href
+const socialImage = post.data.social ?? post.data.image
+const postImage = socialImage
+  ? new URL(socialImage, Astro.site).href
   : undefined
 
 // Error handling for content rendering
