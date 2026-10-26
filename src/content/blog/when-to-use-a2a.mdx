@@ -1,0 +1,165 @@
+---
+title: "A2A Is for Strangers: When to Use A2A and When It's Overhead"
+description: "When to use A2A: at a boundary where a standard contract pays off. Inside a tightly coupled fleet, it's usually overhead. A Docker test against MCP and NATS."
+date: 2026-10-26
+image: /content/images/covers/when-to-use-a2a.png
+social: /content/images/covers/when-to-use-a2a-social.png
+authors:
+  - jack-klimov
+tags:
+  - ai
+  - agents
+  - protocols
+  - a2a
+featured: true
+draft: false
+---
+
+{/* map: intro / what A2A makes you run / when to use A2A / the same handoff four ways / what broke when an agent died / my own fleet on A2A / what to use instead / is the protocol the hard part / when to use A2A: the short version */}
+
+A2A turns every agent you expose into a network service: a card and an endpoint, and for long, interactive work, a task store. That's the right shape when the agent on the other side belongs to someone else (another department, a vendor, a platform), and a strange one when the agent is your own. That's my answer to when to use A2A, and this post is the evidence: the same agent handoff built four ways in Docker, the one detailed production report I could find, and my own attempt to run a personal fleet on it.
+
+Eon, the company behind that production report, put it in one line: "You can't import a stranger's agent. You can only call it."[^1] A2A is a protocol for calling strangers. Your own agents are not strangers.
+
+## What Does A2A Make You Run?
+
+The basics are in my [MCP vs A2A post](/blog/wild-west-of-ai-protocols/). The short version: an A2A agent publishes an Agent Card at `/.well-known/agent-card.json` with its skills, endpoints and auth schemes. You send it a message. It answers with a task that has an ID and a state: submitted, working, input required, auth required, completed, failed, canceled or rejected. You poll it, stream it over SSE, or hand it a webhook. A quick call can skip all that: the server may answer with a plain message and no task, and push notifications are an optional capability.
+
+The spec is short. For a long, interactive task like the one I tested below, what you own is not:
+
+- **A task store.** Tasks outlive the HTTP call. The Python SDK's default handler keeps live streams in memory; for more than one replica its own code warns you to "route subscription requests to the replica holding the task."[^2]
+- **Webhook configs that persist, if you offer push.** The spec: the push configuration "MUST persist until task completion or explicit deletion." The agent must attempt each delivery at least once and may retry, so a delivery can arrive twice or not at all: make the handler idempotent, and guard the URLs against SSRF.[^3]
+- **Auth.** The card declares the schemes (API key, HTTP auth such as Bearer, OAuth2, OIDC, mTLS) and the server must authenticate every request, but getting the credential is out of band: A2A says to rely on "established web security practices." On the "auth required" state, the spec says it "does not define the scope, representation, validity, or revocation semantics of the authorization decision."[^3]
+- **Two versions.** 1.0 shipped in March 2026 with 16 breaking changes. Seven months later Gemini Enterprise, SAP Joule, IBM watsonx Orchestrate and CrewAI's default all still speak 0.3.[^4] The Python SDK carries about 8,000 lines just to translate 0.3.[^2]
+- **Trust.** The other agent's card is text your model reads. Trustwave showed a rogue card description can win every task from an LLM host.[^5] Card signing is optional, and right now two SDKs produce different bytes for the same card, so signatures don't verify across them.[^6]
+
+None of this is exotic. It's the normal cost of putting a service on the network. The question is whether your agent needs to be a service on the network at all.
+
+## When to Use A2A
+
+When the agent on the other side is a stranger. In practice that means two cases.
+
+**Another department or another company.** The test isn't the company badge. It's whether the other side has its own owner, its own release cycle, its own credentials and its own on-call. You can't read their code and you can't ship it for them. A server with a published contract, its own HTTP endpoint and webhooks is exactly what you want between those two worlds. This is the case Eon describes: about 20 of its specialist agents stay in one service, where a function call is enough, and 3 went behind A2A, each with a reason to sit across a boundary. One held production credentials and shipped on the backend's release cycle. One changed with the data model. The third kind was built by tenants.[^1]
+
+A separate owner doesn't make A2A necessary on its own, though. It earns its place when a standard contract helps: several callers you don't control, or a platform that requires it. For one caller you can talk to, a plain API is enough.
+
+**A platform that plugs in outside agents through A2A.** Gemini Enterprise, Microsoft Foundry, Copilot Studio, SAP Joule, ServiceNow and Atlassian Rovo all connect to outside agents over A2A. Copilot Studio only calls out: your agent is the A2A server.[^4] If your agent has to show up inside one of them, A2A is the entry ticket. Build it as one adapter at the edge, not as the way your own agents talk to each other. The protocol itself isn't hard to implement. What's hard is good introspection of your own fleet, and A2A doesn't give you that.
+
+Google's own ADK docs draw the line from both sides. They suggest A2A for a separate, standalone service, an agent from another team or organization, one in a different language or framework, or when you need a formal contract between agents. And they say not to use A2A for internal code organization, for latency-critical internal calls, for agents that share memory, or for simple helpers. On shared memory: "A2A's network overhead and serialization/deserialization would be counterproductive."[^7]
+
+## What Does A2A Cost Next to MCP, NATS and a Function Call?
+
+To see the cost instead of arguing about it, I built one scenario four ways, all in Docker. An orchestrator hands a task to a worker. The worker does four steps, sends progress after each, asks one question after step 2 ("Short or long summary?"), waits for the answer, and returns a result. Stub agents, no model calls: I wanted the coordination layer alone. An agent (Claude) wrote the code, and it all runs from one script in throwaway containers.
+
+| | In-process | A2A 1.0 | MCP 2026-07-28 | NATS JetStream |
+|---|---|---|---|---|
+| Lines of code | 29 | 108 | 73 | 87 |
+| Packages added | 0 | 36 | 28 | 1 (+ a broker) |
+| Image size over Python | 0 MB | +51.5 MB | +38.9 MB | +0.8 MB (+26.5 MB broker) |
+| One task, no work (median) | 0.008 ms | 6.4 ms | 5.6 ms | 1.0 ms |
+| Question round trip (median) | 0.0002 ms | 3.1 ms | 2.7 ms | 0.35 ms |
+| A card that tells a stranger who it is | no | yes | no card (discovery lists tools and instructions) | no |
+
+Versions: `a2a-sdk` 1.2.3, `mcp` 2.3.0, `nats-py` 2.16.0 with NATS server 2.14, Python 3.12. 200 sequential runs per variant after 10 warmup runs, on an M1 Max, all containers on one Docker network: no TLS, no auth, no concurrency. Task latency is one full task, measured by the orchestrator from handoff to result, with clients and connections reused between runs. The question round trip is measured by the worker, from sending the question to holding the answer. So this ranks these four implementations, not the protocols in every setup. And NATS moves the weight out of your process into a broker you run, persist and upgrade: by bytes deployed it's A2A 51.5 MB, MCP 38.9 MB, NATS 27.3 MB.
+
+Two things stand out, and they pull in opposite directions.
+
+First, latency is usually not the argument. A few milliseconds per task disappear next to a model that thinks for seconds. A paper that measured A2A against a lighter protocol found the same: the gap is "almost entirely from connection setup," tens of milliseconds; connection caching narrows it, and it reaches near parity once inference dominates.[^8] It matters for short, frequent or many-hop calls, and Google lists latency-critical internal calls as a reason to skip A2A. For agent-sized work, the cost is code, packages, and the things you now operate.
+
+Second, the last row. I gave a 40-line client, Python standard library only, nothing but the A2A worker's base URL. It read the card, found the endpoint, streamed the task, saw `TASK_STATE_INPUT_REQUIRED`, answered on the same `taskId`, and got the result. First try. No shared code, no shared types, just the spec. NATS can't do that: the subjects are a private convention only my orchestrator understands. MCP comes closest: a generic client can discover the server's tools, capabilities and instructions, and call them. But there's no A2A-style card with skills and task states, and MCP's design assumes you trust the server.[^14]
+
+That's the whole trade in one table. In this test A2A was the heaviest option, and the only one with a card a stranger's client could read and drive.
+
+## What Happened When I Killed the Worker?
+
+I ran two crash tests per variant with `docker kill`: once in the middle of the work, once while the question was waiting for an answer. Then I restarted the same worker.
+
+These are the setups I tested, not an either/or. A2A is the contract a caller sees; a broker is one way to make work survive a crash. One system can have both: an A2A door at the edge with JetStream behind it. Each setup is minimal: A2A with its default in-memory store, A2A with its sqlite store swapped in, and NATS with a durable JetStream pull consumer, a 5-second ack wait, worker heartbeats, and a 5-line check in the worker that finds an answer already in the stream after a redelivery.
+
+```mermaid alt="Killing the worker mid-task. A2A with the default in-memory store: the stream breaks at once, but the task is gone after restart. A2A with a sqlite store: the task reads 'working' forever. NATS JetStream: the orchestrator is never told; after about 6 seconds of silence the broker redelivers the task, and it completes." caption="Crash in the middle of the work, three setups."
+flowchart TD
+  K[Worker killed mid-task] --> A[A2A, in-memory store]
+  K --> S[A2A, sqlite store]
+  K --> N[NATS JetStream]
+  A --> A1[Stream breaks, task lost]
+  S --> S1[Task stuck in 'working']
+  N --> N1[Not told, task redelivered and done]
+  classDef hot stroke-width:3px
+  class N1 hot
+```
+
+With A2A's default in-memory store, the streaming client sees the connection drop at once, which is good, but no task is marked failed, and after the restart the task is gone: `TaskNotFoundError` after the restart. Swap in a durable sqlite store and a crash mid-work leaves a task that reads `TASK_STATE_WORKING` forever. Nothing in the SDK marks it failed; you write the reaper. A task paused on its question did survive with sqlite, because it wasn't running anything. Durability had a cost here: the SDK's sqlite store (`DatabaseTaskStore` over aiosqlite, default settings) took the median from 6.4 ms to 95.6 ms while writing every event. That's this store in this setup, not the price of durability in general.
+
+NATS did the opposite. The orchestrator never heard about the crash; it saw about 6 seconds of silence. But the broker redelivered the task to the restarted worker, and it completed with zero recovery code in the orchestrator. The price is that the worker must be safe to run twice.
+
+MCP's new stateless version has a trick of its own: a paused call carries its state with the client, so with a shared key any server process can resume it. But in the 2026-07-28 version it can't pause a running tool at all; `ctx.elicit()` fails with "no back-channel for server-initiated requests," and the tool has to checkpoint and return.
+
+The lesson isn't that one protocol wins. Recovery is something you design, and A2A doesn't design it for you.
+
+## What Happened When I Ran My Own Fleet on A2A?
+
+I built an internal system for my own agents on A2A, with AG-UI for the interface. One agent, Picasso, made images on request: other agents could ask it for a picture and it drew one in my brand style. Another was a snob, a hater whose job was to come in and tear an article to shreds, so I could see where it was weak.
+
+The roles were good. But A2A made the whole setup heavy, especially for a personal mini fleet. And it didn't solve the problems that actually mattered: coordinating the work through a board, and giving the agents their tools.
+
+A2A answers "how does agent A call agent B." In my own fleet that was never the hard question.
+
+## What to Use Instead of A2A for Your Own Agents
+
+What I took from that attempt: sometimes plain harnesses are simpler, and when coordination gets serious, a well-organized message bus does it better. As a ladder:
+
+1. **Subagents inside one harness.** Claude Code subagents, OpenAI Agents SDK handoffs, LangGraph's subagents pattern. A subagent is a function call with a long runtime. No card, no task store, no auth, because nothing crosses a boundary. OpenAI's maintainers said in August they "do not plan to add an SDK-owned A2A abstraction" to their Agents SDK.[^9]
+2. **Two harnesses that talk to each other.** Sometimes it's simpler to start two agents in a terminal multiplexer like [herdr](https://herdr.dev) and ask them to talk. No protocol at all.
+3. **A message bus plus a board, when coordination gets serious.** HTTP servers and webhooks suit agents open to outside systems. Inside, a message bus is much better. My own setup is a private system where agents, the loop that drives them, and I all meet on one NATS bus. Task state lives on a board, not in the messages, so there is never a second copy of it. When an agent needs an answer, it asks and ends its turn; the answer starts a new turn in the same session.
+
+Map that bus against A2A and several of A2A's ideas are already there under other names. A role card instead of an Agent Card. A thread ID instead of a `contextId`. "Ask and end the turn" instead of `INPUT_REQUIRED`. What's missing is exactly the stranger part: discovery across organizations, cross-company identity, an HTTP door for agents that can't join the bus.
+
+And if you need that door later, you don't rebuild the house. You put one A2A adapter at the edge, the same way Cotal and Solace Agent Mesh carry A2A's message shapes over a broker instead of making every agent an HTTP server.[^10]
+
+```mermaid alt="Decision flow for when to use A2A. Does the other agent have a separate owner or release cycle, like another team, company or platform? Yes: does a standard contract help, or does a platform require it? Yes: use A2A at that edge. No: a plain API. No separate owner: is it a short helper? Yes: a subagent in your harness. No: do several agents need shared work and state? Yes: a message bus plus a board. No: two harnesses talking." caption="When to use A2A, and what to use when you don't."
+flowchart TD
+  Q1{Separate owner or release cycle?} -->|yes| Q0{Standard contract helps, or a platform requires it?}
+  Q0 -->|yes| A[A2A at that edge]
+  Q0 -->|no| P[A plain API]
+  Q1 -->|no| Q2{Short helper?}
+  Q2 -->|yes| S[Subagent in your harness]
+  Q2 -->|no| Q3{Shared work and state?}
+  Q3 -->|yes| B[Message bus plus a board]
+  Q3 -->|no| H[Two harnesses talking]
+  classDef hot stroke-width:3px
+  class A hot
+```
+
+## Is the Protocol the Hard Part?
+
+No. Implementing A2A isn't hard. The hard part is seeing what your fleet is doing: which agent holds which task, why one stalled, what it asked and who answered. A protocol for agents to talk doesn't give you that.
+
+The research points the same way. CooperBench, from Stanford and SAP, gave two coding agents separate but potentially conflicting features in the same codebase, across more than 600 tasks. Working together, they did much worse than one agent doing both features: GPT-5 solved 48% alone and 28% as a pair. Letting them message each other cut naive merge conflicts but didn't raise success. The failures were jammed channels, broken commitments and wrong beliefs about what the partner was doing.[^11]
+
+More talking is not coordination. That's why my own setup coordinates through a board, not a chat channel.
+
+To me, A2A looks like another enterprise solution: it adds more constraints than it removes problems, unless you're calling a stranger's agent. The numbers back the caution. Last month `a2a-sdk` was downloaded 11.4 million times from PyPI; `mcp` was downloaded 235 million times.[^12] Pydantic AI moved its A2A support out of its core in May, into a separate bridge.[^13] Downloads measure ecosystem pull, not which architecture is right, but the gap is wide. And Eon, the one team with a detailed production write-up, said both that "adopting A2A added failure modes rather than removing them" and "We'd choose A2A again."[^1] Both are true. It's the right tool at a real boundary, and the wrong default for a tightly coupled fleet of your own.
+
+## When to Use A2A: The Short Version
+
+- Use A2A where your agent meets a stranger and a standard contract pays off: several callers you don't control, or a platform like Gemini Enterprise or Copilot Studio that requires it. One caller you can talk to? A plain API is enough.
+- Inside your own fleet, don't make every agent a network service. Use subagents first, two harnesses talking when that's enough, and a message bus plus a board when coordination gets serious.
+- If you ship A2A, check which version your callers speak (many still need 0.3), and if your tasks run long, plan a durable task store, a reaper for tasks stuck in "working", and your own credential flow.
+- Spend the effort you saved on introspection: one place where you can see every task, every question and every answer.
+
+If you're deciding where the agent boundaries sit in your own system, that's the kind of work I do: [get in touch](/about/).
+
+[^1]: https://aaif.io/blog/what-we-learned-putting-a2a-into-production (Rachel Neriya Schifter, Eon, 2026-08-26)
+[^2]: https://github.com/a2aproject/a2a-python (`server/request_handlers/default_request_handler_v2.py`, `compat/v0_3/`; checked 2026-10-23)
+[^3]: https://github.com/a2aproject/A2A/blob/main/docs/specification.md (§3.1.7 push config persistence, §4.3.3 delivery, §7 auth, §7.6.4 auth required, §13.2 SSRF)
+[^4]: https://docs.cloud.google.com/gemini/enterprise/docs/register-and-manage-an-a2a-agent, https://architecture.learning.sap.com/docs/ref-arch/76ec36, https://www.servicenow.com/community/ceg-ai-coe-articles/servicenow-as-a-primary-a2a-agent-discovering-and-invoking/ta-p/3528579, https://developer.watson-orchestrate.ibm.com/agents/connect_agent, https://docs.crewai.com/en/learn/a2a-agent-delegation, https://learn.microsoft.com/en-us/azure/foundry/agents/how-to/tools/agent-to-agent, https://learn.microsoft.com/en-us/microsoft-copilot-studio/add-agent-agent-to-agent, https://developer.atlassian.com/cloud/rovo-a2a/
+[^5]: https://www.levelblue.com/blogs/spiderlabs-blog/agent-in-the-middle-abusing-agent-cards-in-the-agent-2-agent-protocol-to-win-all-the-tasks (Tom Neaves, Trustwave SpiderLabs, 2025-04-21)
+[^6]: https://github.com/a2aproject/A2A/issues/2122
+[^7]: https://adk.dev/a2a/intro/
+[^8]: Sinha et al., "The Cost of a Hop: Benchmarking NLIP and A2A," https://arxiv.org/abs/2610.04053 (2026-10-02)
+[^9]: https://github.com/openai/openai-agents-python/issues/472
+[^10]: https://github.com/Cotal-AI/Cotal and https://docs.solace.com/Agent-Mesh/Framework/concepts/a2a-protocol.htm
+[^11]: Khatua, Zhu, Tran et al., "CooperBench: Why Coding Agents Cannot be Your Teammates Yet," https://arxiv.org/abs/2601.13295
+[^12]: https://pypistats.org/packages/a2a-sdk and https://pypistats.org/packages/mcp (last month, checked 2026-10-23)
+[^13]: https://github.com/pydantic/pydantic-ai/pull/5426 and https://github.com/pydantic/pydantic-ai/pull/5502
+[^14]: https://github.com/modelcontextprotocol/agents-wg/blob/main/meetings/2026-07-31.md (MCP Agents WG notes)
