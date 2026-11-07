@@ -2,6 +2,13 @@
   "stamp": "42e924d163d9",
   "mermaid": "12.1.0",
   "diagrams": {
+    "c86be0f3a42e": {
+      "width": 406,
+      "height": 833,
+      "posts": [
+        "running-claude-code-headless-as-a-backend-what-breaks"
+      ]
+    },
     "87d565585ca2": {
       "width": 294,
       "height": 383,

@@ -131,6 +131,23 @@ export const COVERS: Record<string, CoverSpec> = {
     },
   },
 
+  'running-claude-code-headless-as-a-backend-what-breaks': {
+    kicker: 'Claude Code headless',
+    short: 'Coding agents as backends: what breaks',
+    stat: '16/16 denies held',
+    diagram: {
+      kind: 'events',
+      items: [
+        { t: 'your setup', tag: '96 MCP tools loaded' },
+        { t: 'background shell', tag: 'turn never ends' },
+        { t: 'expired OAuth', tag: 'error hidden' },
+        { t: '--disallowedTools', hot: true, tag: 'test it live' },
+        { t: 'the wire (UHP, ACP)' },
+      ],
+      caption: 'the protocol is the easy part',
+    },
+  },
+
   'every-knob-in-a-claude-code-skill-md': {
     kicker: 'Reference',
     short: 'Every knob in a Claude Code SKILL.md',
