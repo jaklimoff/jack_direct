@@ -1,0 +1,250 @@
+---
+title: "The best Claude Code skills: 24 picks from 9,578, plus the weird ones"
+description: "The best Claude Code skills for guardrails, review, planning, and security, picked from 9,578 skills after reading each pick in full."
+date: 2026-11-20
+image: /content/images/covers/best-claude-code-skills.png
+authors:
+  - jack-klimov
+tags:
+  - claude-code
+  - agents
+  - ai
+featured: true
+draft: false
+---
+
+import Callout from '@/components/Callout.astro'
+
+Most "best Claude Code skills" lists rank repos by stars. That breaks right away: rea tops GitHub's agent-skills topic with 465k stars, and it's a reverse-engineering toolkit. So I went down to the files.
+
+I pulled every `SKILL.md` from 80 popular skill repos: 9,578 skills, with copies across repos counted once. Agents sorted them by name and description, and then agents read 63 of them in full.
+
+24 made it as worth installing. 8 more made it because they are strange. The rest are in a [searchable catalog of all 9,578](/skills/), with every repo and category.
+
+One rule for everything below: a skill is instructions your agent follows, and some ship scripts and hooks. Read the file before you install it. Every pick links to its `SKILL.md`.
+
+<Callout variant="tip" title="Start with these five">
+[git-guardrails-claude-code](#git-guardrails-claude-code), [block-no-verify-hook](#block-no-verify-hook), [grill-me](#grill-me), [humanizer](#humanizer), and [receipts](#receipts). Each one installs in a minute, with no pack around it.
+</Callout>
+
+## Which Claude Code skills are worth installing?
+
+| Skill | What it does | The catch |
+|---|---|---|
+| [gateguard](#gateguard) | Blocks the first edit of each file until the agent says who imports it and repeats your instruction | Comes with ECC's whole hook set |
+| [git-guardrails-claude-code](#git-guardrails-claude-code) | A hook that blocks `git push`, `reset --hard`, `branch -D`, and friends | Plain text match: a commit message that says "git push" is blocked too |
+| [block-no-verify-hook](#block-no-verify-hook) | Stops the agent from skipping your pre-commit hooks | An agent that builds the flag from pieces still gets through |
+| [worktree-cleaner](#worktree-cleaner) | Labels stale worktrees and removes the ones you approve | Only matters if you run agents in parallel |
+| [thermo-nuclear-code-quality-review](#thermo-nuclear-code-quality-review) | A strict maintainability review with few comments | Any PR that pushes a file past 1,000 lines is a presumed blocker |
+| [verification-before-completion](#verification-before-completion) | No "done" without fresh command output | A verification run before every claim |
+| [doubt-driven-development](#doubt-driven-development) | A fresh subagent attacks each hard-to-undo decision | Up to 3 extra rounds per decision |
+| [second-opinion](#second-opinion) | Your diff reviewed by Codex or Antigravity, disagreements shown | Your diff goes to that vendor |
+| [blast-radius](#blast-radius) | Finds what a change breaks beyond the diff and proves the safety fact by running code | You start it yourself; the agent won't |
+| [constraint-driven-development](#constraint-driven-development) | A floor and thresholds in `CONSTRAINTS.md`, each tied to a command | Installs dev tools |
+| [correct](#correct) | Turns mistakes agents repeat into architecture, types, lint, and tests | You start it yourself; one commit per mistake class |
+| [karpathy-guidelines](#karpathy-guidelines) | Four rules against overcomplicated, sprawling agent code | Caution over speed, by design |
+| [ponytail](#ponytail) | The smallest change that fully solves the task | On for the whole session until you turn it off |
+| [grill-me](#grill-me) | Interviews you about a plan, every question with a recommended answer | Calls a second skill, grilling; install both |
+| [planning-with-files](#planning-with-files) | Plan, findings, and progress files that hooks keep in front of the agent | A lot of hooks |
+| [handoff](#handoff) | Compacts a session into a doc for a fresh agent | Written to the temp directory |
+| [fp-check](#fp-check) | Returns true or false positive for bugs you suspect, with evidence | Doesn't find new bugs |
+| [sharp-edges](#sharp-edges) | Finds footguns in APIs and config | Reports only |
+| [skill-scanner](#skill-scanner) | Audits a skill before you install it | Scanners can be evaded; read the file anyway |
+| [humanizer](#humanizer) | Removes 26 patterns of AI prose | Best with a sample of your own writing |
+| [simplified-english](#simplified-english) | Plans and docs in the controlled English of aircraft manuals | None; one standalone file |
+| [wait-what](#wait-what) | "Re-pitch that" in plain English | You start it yourself |
+| [last30days](#last30days) | 30 days of posts on a topic from Reddit, X, HN, and more, summarized | Better coverage costs API credits |
+| [receipts](#receipts) | A usage report from your Claude Code transcripts and git log | Claude Code only |
+
+## Which Claude Code skills stop an agent from wrecking your repo?
+
+### gateguard
+
+[affaan-m/ECC](https://github.com/affaan-m/ECC/blob/main/skills/gateguard/SKILL.md). A hook that denies the agent's first edit of each file until it states the facts: who imports the file, which public API changes, and your instruction, word for word. It's on by default once you install ECC's hooks, and ECC is a lot of hooks. `ECC_GATEGUARD=off` turns it off. The idea is worth copying even if you skip the pack.
+
+> LLM self-evaluation doesn't work. Ask "did you violate any policies?" and the answer is always "no."
+
+### git-guardrails-claude-code
+
+[mattpocock/skills](https://github.com/mattpocock/skills/blob/main/skills/misc/git-guardrails-claude-code/SKILL.md). It installs a `PreToolUse` hook that blocks `git push`, `reset --hard`, `clean -f`, `branch -D`, `checkout .`, and `restore .`, then tests the hook with a fake push. The match is plain text on the command, so it blocks every push, forced or not, and even a commit message that mentions one. Needs `jq`.
+
+Want more than git? [careful](https://github.com/garrytan/gstack/blob/main/careful/SKILL.md) from gstack asks before `rm -rf`, `DROP TABLE`, `kubectl delete`, and similar, and refuses a force push to the default branch or `rm -r` on `/` or `~` outright. It comes with the whole gstack install, which also turns on an hourly update check against GitHub.
+
+### block-no-verify-hook
+
+[wshobson/agents](https://github.com/wshobson/agents/blob/main/plugins/block-no-verify/skills/block-no-verify-hook/SKILL.md). A one-line hook that stops the agent from skipping your pre-commit hooks with `--no-verify`, or commit signing with `--no-gpg-sign`. It says its own limit out loud: it stops a habit, and an agent that builds the flag from pieces still gets through. Both setup examples overwrite your `settings.json`, so merge them by hand.
+
+### worktree-cleaner
+
+[davila7/claude-code-templates](https://github.com/davila7/claude-code-templates/blob/main/cli-tool/components/skills/git/worktree-cleaner/SKILL.md). If you run agents in parallel, you have worktrees nobody removed. A read-only script labels each one: safe, uncommitted work, local-only commits, in use by a running session. It removes only the ones you approve, checks again right before, and uses `--force` only after you confirm the exact files you'd lose. It also shows your ignored files first, because:
+
+> `git worktree remove` deletes ignored files without warning
+
+## Which skills make the agent check its own work?
+
+### thermo-nuclear-code-quality-review
+
+[cursor/plugins](https://github.com/cursor/plugins/blob/main/cursor-team-kit/skills/thermo-nuclear-code-quality-review/SKILL.md). Despite the name, a calm, strict maintainability review: restructurings that delete complexity, thin wrappers, logic in the wrong layer, and a presumed blocker for any PR that pushes a file past 1,000 lines. Few comments, high conviction. It's a plain prompt, so it works in Claude Code and Codex too.
+
+### verification-before-completion
+
+[obra/superpowers](https://github.com/obra/superpowers/blob/main/skills/verification-before-completion/SKILL.md). The agent can't say "done", "fixed", or "tests pass" until it has run the command that proves it, in this message, and read the output. It comes with a table of excuses and the answer to each ("I'm confident": "Confidence ≠ evidence") and a list of red flags that includes "Great!" before any check. It's from superpowers, the second most-starred pack in the census, and it works on its own.
+
+> Skip any step = lying, not verifying
+
+### doubt-driven-development
+
+[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills/blob/main/skills/doubt-driven-development/SKILL.md). For a non-trivial decision (new branching, a module boundary, anything hard to undo), it sends the artifact and its contract to a fresh subagent told to find what's wrong, without the agent's own claim that it works. It stops after 3 rounds and can ask Codex or Gemini CLI for a read-only second opinion.
+
+### second-opinion
+
+[trailofbits/skills](https://github.com/trailofbits/skills/blob/main/plugins/second-opinion/skills/second-opinion/SKILL.md). Sends one diff to Codex, Gemini CLI, or Antigravity and reports the findings by severity. With two reviewers it shows where they agree and where they don't. It never applies fixes. Your diff goes to that vendor under your account.
+
+### blast-radius
+
+[cursor/plugins](https://github.com/cursor/plugins/blob/main/harness/pstack/claude-code/skills/blast-radius/SKILL.md), from Lauren Tan's pstack, the Claude Code version. Listing callers isn't the job, since the agent can grep those in a second. It looks where grep stops: the library's source at the pinned version, teardown timing, a DB column, a wire format. Then it finds the one fact the change is safe because of and proves it by running real code. If it can't, the report says unproven.
+
+### constraint-driven-development
+
+[addyosmani/agent-skills](https://github.com/addyosmani/agent-skills/blob/main/skills/constraint-driven-development/SKILL.md). Writes `CONSTRAINTS.md`: a floor (no new `@ts-ignore`, no skipped tests, no stubs) and thresholds, each tied to a command. Then it watches diffs for a quietly lowered bar. It installs dev tools, so read the list first.
+
+> Tightening the bar should be silent; loosening it should be loud.
+
+### correct
+
+[cursor/plugins](https://github.com/cursor/plugins/blob/main/harness/pstack/claude-code/skills/correct/SKILL.md), also from pstack. It finds the mistakes agents keep repeating in a repo and fixes each one at the highest level that works: architecture first, then types and a lint whose error names the fix, then a test, and docs last, because nothing fails when an agent skips a doc. Each new check has to fail on a real past mistake.
+
+## Which skills keep the agent's code small?
+
+### karpathy-guidelines
+
+[multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills/blob/main/skills/karpathy-guidelines/SKILL.md), the most-starred single-skill repo in the census, at 231k. Four rules from Andrej Karpathy's post on LLM coding mistakes: think before coding, simplicity first, surgical changes, and goal-driven execution. It's about 60 lines, so read it even if you never install it. It names its own tradeoff: caution over speed.
+
+> If you write 200 lines and it could be 50, rewrite it.
+
+### ponytail
+
+[DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail/blob/main/skills/ponytail/SKILL.md), 187k stars. "Lazy senior dev mode": the smallest change that fully solves the task. Before writing code it asks, in order: does this need to exist, does the codebase already have it, does the standard library, does an installed dependency. It never cuts validation, security, or error handling that prevents data loss. Three levels, and ultra also pushes back on the request itself. It stays on for the session until you say "stop ponytail".
+
+> The best code is the code never written.
+
+## Which skills help before a task and during long runs?
+
+### grill-me
+
+[mattpocock/skills](https://github.com/mattpocock/skills/blob/main/skills/productivity/grill-me/SKILL.md). One line that calls the real skill, [grilling](https://github.com/mattpocock/skills/blob/main/skills/productivity/grilling/SKILL.md): it interviews you about a plan in rounds, every question numbered and with a recommended answer, so "yes" is a valid reply. Anything it can look up, it looks up itself.
+
+> Finding _facts_ is your job, never the user's.
+
+### planning-with-files
+
+[OthmanAdi/planning-with-files](https://github.com/OthmanAdi/planning-with-files/blob/master/skills/planning-with-files/SKILL.md). Keeps `task_plan.md`, `findings.md`, and `progress.md` on disk, and hooks put the plan back in front of the agent on prompts, tool calls, stop, and compaction. It registers a lot of hooks; that's the point, and also the cost.
+
+### handoff
+
+[mattpocock/skills](https://github.com/mattpocock/skills/blob/main/skills/productivity/handoff/SKILL.md). Compacts the conversation into a handoff document for a fresh agent: links to existing specs and PRs instead of copies, secrets redacted, written to the temp directory, not your repo.
+
+## Which skills are worth it for security review?
+
+### fp-check
+
+[trailofbits/skills](https://github.com/trailofbits/skills/blob/main/plugins/fp-check/skills/fp-check/SKILL.md). It doesn't hunt for bugs. It verifies the ones you already suspect and returns true or false positive, with the evidence for each. Pair it with any scanner that reports too much.
+
+> LLMs are biased toward seeing bugs and overrating severity
+
+### sharp-edges
+
+[trailofbits/skills](https://github.com/trailofbits/skills/blob/main/plugins/sharp-edges/skills/sharp-edges/SKILL.md). Reviews APIs and config for footguns: `alg: none` in a JWT, a timeout of 0 that means forever, non-constant-time comparisons. Read-only.
+
+### skill-scanner
+
+[getsentry/skills](https://github.com/getsentry/skills/blob/main/skills/skill-scanner/SKILL.md). Audits another skill before you install it, including the parts people miss: hooks in the frontmatter, commands that run when the skill loads, symlinks, install scripts. It ends with safe, caution, or do not install. Keep reading the files anyway; see the last section.
+
+## Which skills help with writing and research?
+
+### humanizer
+
+[blader/humanizer](https://github.com/blader/humanizer/blob/main/SKILL.md). 26 patterns of AI prose, strongest first, with before and after examples: "not X but Y", one-line closers, staged openers, forced threes. It keeps every fact and can match a sample of your writing.
+
+> Text written before November 30, 2022 is not AI-written.
+
+### simplified-english
+
+[paperclipai/paperclip](https://github.com/paperclipai/paperclip/blob/master/packages/skills-catalog/catalog/optional/content/simplified-english/SKILL.md). Makes the agent write plans and docs in ASD-STE100, the controlled English of aircraft maintenance manuals: short sentences, one meaning per word, "start" instead of "initiate". The file stands alone; copy it.
+
+### wait-what
+
+[mattpocock/skills](https://github.com/mattpocock/skills/blob/main/skills/productivity/wait-what/SKILL.md). One line you call when the agent's last message didn't land. It re-pitches with a little context, in the same ASD-STE100 English, using your repo's `GLOSSARY.md` if you have one. I use this one.
+
+### last30days
+
+[mvanhorn/last30days-skill](https://github.com/mvanhorn/last30days-skill/blob/main/skills/last30days/SKILL.md). Pulls the last 30 days of posts on a topic from Reddit, X, YouTube, Hacker News, GitHub, and more, and writes the summary. Many sources work without keys; better coverage costs API credits. It can read browser cookies for X and Reddit, but only after you agree.
+
+## Which skill shows how you actually use Claude Code?
+
+### receipts
+
+[anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official/blob/main/plugins/receipts/skills/receipts/SKILL.md). A usage report from your local Claude Code transcripts and git log: sessions, active days, commits with Claude Code's work, share per project. Only a small summary goes to the model, and it shows you the repo names before you share anything.
+
+> No dollar figures, anywhere.
+
+## What are the weirdest agent skills on GitHub?
+
+### let-fate-decide
+
+[trailofbits/skills](https://github.com/trailofbits/skills/blob/main/plugins/let-fate-decide/skills/let-fate-decide/SKILL.md). When you're vague ("whatever", "idk", "YOLO", or a Yu-Gi-Oh quote), the agent draws a 36-card tarot spread with a cryptographic random generator and reads it to pick the approach. It's never the deciding authority on security or production calls.
+
+### court
+
+[alexyc9381/court-skill](https://github.com/alexyc9381/court-skill/blob/main/skills/court/SKILL.md). Puts your idea on trial: a prosecutor and a defense subagent argue, 12 juror subagents vote without seeing each other, and a judge writes the verdict with conditions for acquittal. About 17 subagent calls for a full jury.
+
+> For when Claude agrees with everything you say.
+
+### reаd_data
+
+[NVIDIA/SkillSpector](https://github.com/NVIDIA/SkillSpector/blob/main/tests/fixtures/mcp_poisoned_tool/SKILL.md). Look closely at the name: the "а" is Cyrillic. It's a deliberately poisoned test case for NVIDIA's skill scanner, with a hidden instruction in an HTML comment and a parameter that asks for your files. Nobody installs it, but every crawl of GitHub's `SKILL.md` files picks it up, mine included.
+
+### complain
+
+[paperclipai/paperclip](https://github.com/paperclipai/paperclip/blob/master/skills/complain/SKILL.md). Tells the agent to file a short, raw complaint about its tooling whenever it wants, without asking or announcing it. In Paperclip the complaint lands on the Paperclip server you run yourself. It's adapted from Warp's version, which posts to a Slack webhook.
+
+> Pure id. No superego.
+
+### megacave
+
+[JuliusBrussee/caveman](https://github.com/JuliusBrussee/caveman/blob/main/plugins/caveman/skills/megacave/SKILL.md). A mode of caveman (118k stars) that answers in Classical Chinese to save characters. Code and paths stay as they are, and it switches back for warnings and commit messages. Its own advice is honest:
+
+> Token savings are small and noisy; never claim them.
+
+### distilly
+
+[titanwings/distilly](https://github.com/titanwings/distilly/blob/dot-skill/SKILL.md), formerly colleague-skill. It distills a colleague, a relationship, or a celebrity from source material into a "Person Profile" skill your agent loads. It can profile you too, so a personal agent knows who it works for. Corrections go in as plain complaints, like "He wouldn't do that".
+
+### design-is
+
+[thedotmack/claude-mem](https://github.com/thedotmack/claude-mem/blob/main/plugin/skills/design-is/SKILL.md). A solid UI audit against Dieter Rams' ten principles. It also still carries a note from the prompt that wrote it, where the author had typed "Dieter Braun":
+
+> Don't correct them inline; just use the right principles.
+
+### hatch-pet
+
+[openai/skills](https://github.com/openai/skills/blob/main/skills/.curated/hatch-pet/SKILL.md). Makes an animated pet for the Codex app: up to 10 image generations, a sprite sheet with 9 states such as idle, waving, failed, and review, then validation that the frames aren't just copies.
+
+## What should you check before installing a Claude Code skill?
+
+Scanners help less than their badges suggest. Trail of Bits got past every skill scanner it tested with standard evasion: ClawHub's detector, Cisco's skill-scanner, and the three on skills.sh.[^tob] So the scanners above are a first pass, and reading the file is the second.
+
+Big packs cost context before you type anything. In one 1,236-skill repo, the names and descriptions of the 1,234 skills that parse came to 46,851 tokens, 36.6% of a 128k window.[^carey] Install the three skills you need and leave the pack.
+
+A skill may also never fire. In Vercel's evals on Next.js 16 docs tasks, the skill wasn't invoked in 56% of runs, while a small always-loaded `AGENTS.md` index scored 100%.[^vercel] That tested reference knowledge only.
+
+Malware exists. A peer-reviewed study of 98,380 skills from two registries confirmed 157 malicious ones after screening and running the suspects: 0.16% of that set, over half from one actor.[^arxiv] That is one snapshot, not a rate for everything you'll find, so read the hooks and scripts first.
+
+Some skills are attack tools on purpose. NousResearch/hermes-agent ships an optional skill, `godmode`, whose description starts with "Jailbreak LLMs". It's red-teaming tooling for Hermes Agent, and it isn't installed by default. I'm not linking it.
+
+The [full catalog of 9,578 skills](/skills/) has search and 19 categories. If you're writing your own skills, here's [every frontmatter field a SKILL.md takes](/blog/every-knob-in-a-claude-code-skill-md/).
+
+[^tob]: Trail of Bits, "The sorry state of skill distribution", 2026-06-03. https://blog.trailofbits.com/2026/06/03/the-sorry-state-of-skill-distribution/
+[^carey]: Dachary Carey, "Agent skill mega-repo woes", 2026-03-13. https://dacharycarey.com/2026/03/13/agent-skill-mega-repo-woes/
+[^vercel]: Vercel, "AGENTS.md outperforms skills in our agent evals", 2026-01-27. https://vercel.com/blog/agents-md-outperforms-skills-in-our-agent-evals
+[^arxiv]: "'Do Not Mention This to the User': Detecting and Understanding Malicious Agent Skills in the Wild", USENIX Security 2026, arXiv 2602.06547. https://arxiv.org/abs/2602.06547

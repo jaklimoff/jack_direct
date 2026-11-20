@@ -292,6 +292,22 @@ export const COVERS: Record<string, CoverSpec> = {
       caption: 'one step at a time',
     },
   },
+  'best-claude-code-skills': {
+    kicker: 'Claude Code skills',
+    short: '24 worth installing, plus the weird ones',
+    stat: '9,578 sorted',
+    diagram: {
+      kind: 'stairs',
+      items: [
+        { t: '80 skill repos' },
+        { t: '9,578 skills' },
+        { t: '4,232 in original repos' },
+        { t: '63 read in full' },
+        { t: '24 worth installing', hot: true },
+      ],
+      caption: 'read the file before you install',
+    },
+  },
 }
 
 export function getCover(postId: string): CoverSpec | undefined {

@@ -1,0 +1,29 @@
+---
+import PageHead from '@/components/PageHead.astro'
+import SkillCatalog from '@/components/react/SkillCatalog'
+import Layout from '@/layouts/Layout.astro'
+
+const title = 'Agent skills catalog: 9,578 skills from 80 GitHub repos'
+const description =
+  'Search 9,578 SKILL.md files from 80 popular agent skill repos on GitHub, for Claude Code, Codex and other coding agents, in 19 categories.'
+---
+<Layout class="max-w-4xl" title={title} description={description}>
+  <PageHead slot="head" title="Agent skills catalog" />
+
+  <section class="flex flex-col gap-6 py-8">
+    <header class="flex flex-col gap-3">
+      <h1 class="text-3xl font-bold sm:text-4xl">Agent skills catalog</h1>
+      <p class="max-w-[68ch] leading-relaxed text-muted-foreground">
+        Every <code>SKILL.md</code> from 80 popular skill repos on GitHub, from Anthropic's and OpenAI's own to the big
+        community packs and lists, pulled on 2026-11-08: 9,578 skills, with copies across repos counted once. A model sorted them into categories from each skill's name and description, so a
+        category is a lead, not a review. The ones I'd actually install are in
+        <a href="/blog/best-claude-code-skills/" class="underline underline-offset-4 hover:text-foreground">the post</a>.
+      </p>
+      <p class="max-w-[68ch] text-sm leading-relaxed text-muted-foreground">
+        Read a skill before you install it. A skill is instructions your agent follows, and some ship scripts.
+      </p>
+    </header>
+
+    <SkillCatalog client:load />
+  </section>
+</Layout>
